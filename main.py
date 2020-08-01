@@ -183,6 +183,76 @@ class DisplayBox(object):
             self.text = nowList
             self.need_update = True
 
+# 输入框定义
+class InputBox(object):
+    def __init__(self, rect, info = '', mode = 'default', size = 20, color = BLACK, visible = True, lock = False):
+        self.rect = self.x, self.y, self.w, self.h = rect[0], rect[1], rect[2], rect[3]
+        self.info = info
+        self.size = size
+        self.isVisible = visible
+        self.islocked = lock
+        self.text = ''
+        self.mode = mode
+        self.need_update = True
+        self.color = color
+    
+    def get_char(self, char):
+        if self.mode == 'num': 
+            if char.isnumeric():
+                self.text += str(char)
+                return True
+            return False
+        elif self.mode == 'default':
+            self.text += str(char)
+            return True
+    
+    def clear(self):
+        self.text = ''
+        return True
+    
+    def delete(self):
+        if len(self.text) > 1: 
+            self.text = self.text[:-1]
+            return True
+        else:
+            self.text = ''
+    
+    def hide(self):
+        if self.isVisible: 
+            self.isVisible = False
+            self.islocked = True
+            self.need_update = True
+    
+    def show(self):
+        if not self.isVisible: 
+            self.isVisible = True
+            self.islocked = False
+            self.need_update = True
+
+    def get_avilablerect(self):
+        x = int(self.x)
+        y = int(self.y)
+        h = int(self.h)
+        w = int(self.w)
+        return pygame.Rect(x, y, w, h)
+
+    def get_Surface(self): 
+        surface = pygame.Surface((self.w + LINEWIDTH / 2, self.h + LINEWIDTH / 2))
+        surface.fill(WHITE)
+        if self.isVisible:
+            pygame.draw.rect(surface, BLACK, [0, 0, self.w, self.h], LINEWIDTH)
+            x = self.x
+            y = self.y
+            w = self.w
+            h = self.h
+            font = pygame.freetype.Font(FONTPATH, size=self.size)
+            if self.text:
+                t_surf, t_rect = font.render(self.text, self.color, size = self.size)
+                surface.blit(t_surf, get_xypos([self.w / 2, self.h / 2], [t_rect.w, t_rect.h]))
+        return surface
+
+
+
 
 # 按钮类定义
 class Button(object):
@@ -563,10 +633,13 @@ class Block(object):
                         hotal = pygame.transform.scale(self.hotal_surf, (40, 40))
                         screen.blit(hotal, get_xypos((x1, y1), hotal.get_rect()))
         if self.selected:
-            pygame.draw.rect(screen, (0, 0, 0, 120), [0, 0, self.w, self.h], 0)
+            mark = pygame.Surface((self.w, self.h)).convert_alpha()
+            pygame.draw.rect(mark, (0, 0, 0, 120), [0, 0, self.w, self.h], 0) # draw方法并不会绘制透明度，只是将对应像素点的透明度改变
+            screen.blit(mark, (0, 0)) # 故此处用mark层进行透明度绘制，若直接在surface层绘制会导致被覆盖
         elif self.need_select:
             pygame.draw.rect(screen, (0, 255, 0), [0, 0, self.w, self.h], LINEWIDTH * 3)
-        self.need_update = False
+        else:
+            self.need_update = False
         return screen
 
 
@@ -611,13 +684,13 @@ class Player(object):
         self.enable_buybackList = []
         self.ownpubicList = []
         self.owntransportList = []
-        self.ownselledList = []
         # 游戏中需要初始化的一些属性
         self.need_pay = False
         self.operate = False
         self.need_update = True
         self.need_select = False
         self.selected = False
+        self.bankrupted = False
 
     def get_position(self, block):
         c_x, c_y = block.get_centerPos()
@@ -666,6 +739,13 @@ class Player(object):
             return int(num / abs(num))
         else:
             return 0
+    
+    def get_avilablerect(self):
+        x = self.x
+        y = self.y
+        w = self.rect.w
+        h = self.rect.h
+        return pygame.Rect([x, y, w, h])
 
     def move(self, dstblock, move_time=0.37, speed=800, max_distence=500):  # 跳棋时间以及纵向最大移动距离
         dstpos = d_x, d_y = self.get_position(dstblock)
@@ -733,6 +813,13 @@ class Player(object):
                 self.speed = None
 
                 # 下面是一些游戏方法：
+    def select(self):
+        if not self.selected:
+            self.selected = True
+
+    def cancel(self):
+        if self.selected:
+            self.selected = False
 
     def buy_Block(self, targetblock):  # 购买空地
         if targetblock.isbuilding in range(1, 4):
@@ -808,18 +895,21 @@ class Player(object):
                             sameList.append(block)
                         if num == max_buildnum:
                             self.enable_mortgageList.append(block)
-                        if num == 0:
-                            self.enable_dealList.append(block)
                 if sameList:
                     self.enable_blockList.extend(sameList)
+                    if not sameList[0].houseNum and not sameList[0].hotal:
+                        self.enable_dealList.extend(sameList)
             elif owncolorDict[color] < self.allcolorDict[color]:
                 for block in self.ownblockList:
                     if block.colorname == color:
                         self.enable_mortgageList.append(block)
                         self.enable_dealList.append(block)
+        for block in self.ownpubicList + self.owntransportList: 
+            if not block.mortgage: 
+                self.enable_mortgageList.append(block)
+                self.enable_dealList.append(block)
 
     def construct_house(self, targetblock):  # 建造房屋
-        self.update()
         if targetblock.isbuilding == 1:
             if targetblock.colorname in self.enable_colorList:
                 if self.money > targetblock.newbuilding_price:
@@ -829,6 +919,8 @@ class Player(object):
                         message = '建造房屋成功！'
                         self.update()
                         self.need_update = True
+                        if not targetblock in self.enable_blockList:
+                            targetblock.need_select = False
                     elif not targetblock.hotal:
                         targetblock.hotal = True
                         targetblock.houseNum = 0
@@ -836,6 +928,8 @@ class Player(object):
                         self.money -= targetblock.newbuilding_price
                         self.need_update = True
                         self.update()
+                        if not targetblock in self.enable_blockList:
+                            targetblock.need_select = False
                     else:
                         message = ''
                 else:
@@ -867,7 +961,6 @@ class Player(object):
                 construct = targetblock.houseNum
             if mode == 'all':
                 sell = (targetblock.blockprice + construct * targetblock.newbuilding_price) * 0.5
-                self.ownselledList.append(targetblock)
                 self.ownblockList.remove(targetblock)
                 targetblock.need_select = False
                 targetblock.hotal = False
@@ -888,16 +981,42 @@ class Player(object):
                     targetblock.need_select = False
                 else:
                     sell = targetblock.blockprice * 0.5
-                    self.ownselledList.append(targetblock)
                     self.ownblockList.remove(targetblock)
                     targetblock.need_select = False
                     targetblock.mortgage = True
-            self.money += int(sell)
-            self.update()
-            return sell
+        elif targetblock.isbuilding in range(2, 4) and not targetblock.mortgage:
+            sell = targetblock.blockprice * 0.5
+            targetblock.isbuilding == 2 and self.ownpubicList.append(targetblock) or self.owntransportList.append(targetblock)
+            targetblock.need_select = False
+            targetblock.mortgage = True
+        self.money += int(sell)
+        self.update()
+        return sell
 
-    def deal(self, targetblock, targetplayer):
-        pass
+    def deal(self, targetblock, targetplayer): 
+        if targetblock.owner == self:
+            if targetblock.isbuilding == 1 and not targetblock.houseNum and not targetblock.hotal:
+                self.ownblockList.remove(targetblock)
+                targetblock.owner = targetplayer
+                targetblock.need_select = False
+                targetplayer.ownblockList.append(targetblock)
+            elif targetblock.isbuilding == 2: 
+                self.ownpublicList.remove(targetblock)
+                targetblock.owner = targetplayer
+                targetblock.need_select = False
+                targetplayer.ownpublicList.append(targetblock)
+            elif targetblock.isbuilding == 3: 
+                self.owntransportList.remove(targetblock)
+                targetblock.owner = targetplayer
+                targetblock.need_select = False
+                targetplayer.owntransportList.append(targetblock)
+            else:
+                return False
+            self.update()
+            targetplayer.update()
+            return True
+        return False
+                
 
     def init(self):  # 一次使用的判断性语句
         self.need_pay = True
@@ -913,8 +1032,18 @@ class Player(object):
                 self.need_pay = False
             else:
                 message = '金钱不足，濒临破产！'
-                self.need_pay = False
         return message
+    
+class SpecialEvent(object):
+    def __init__(self, building_list, PlayerList, active_player):
+        self.building_list = building_list
+        self.PlayerList = PlayerList
+        self.active_player = active_player
+    
+    def chance(self, mode = 'random'):
+        pass
+
+        
 
 
 # //各类函数
@@ -1047,16 +1176,16 @@ def main():
     player3 = Player('初春', iconDict['初春'], building_list[0], 2, building_list)
     player4 = Player('当麻', iconDict['当麻'], building_list[0], 3, building_list)
     PlayerList.extend([player1, player2, player3, player4])
-    # random.shuffle(PlayerList)
+    random.shuffle(PlayerList)
     active_player = player1
 
     # 测试用
-    player1.money = 6000
-    # player1.selected = True
+    player1.money = 100000
     for block in building_list:
-        if block.isbuilding:
-            player1.buy_Block(block)
-            player1.construct_house(block)
+        player1.buy_Block(block)
+    player2.money = 50
+    player3.money = 50
+    player4.money = 1000
 
     # //各类控件：
     # 文字显示框实例化：
@@ -1107,10 +1236,13 @@ def main():
     displaybox_init = False
     # 选择状态相关
     select_stat = ''
-    select_screen_bk = None
     enable_selectList = []
     menu = 'main'  # 主菜单
+    inputstr = ''
+    inputbox = InputBox([300, 420, 300, 50], visible = False, lock = True)
     select_List = []
+    selectplayer = None
+    charge = None
     while isStart:
         # 事件处理部分
         for event in pygame.event.get():
@@ -1143,14 +1275,32 @@ def main():
                             if event.button == 1:
                                 if not block.selected:
                                     block.select()
-                                    select_List.append(block)
+                                    if isinstance(block, Player):
+                                        selectplayer = block
+                                        break
+                                    else:
+                                        select_List.append(block)
                             elif event.button == 3:
                                 if block.selected:
                                     block.cancel()
-                                    select_List.remove(block)
+                                    if isinstance(block, Player):
+                                        selectplayer = None
+                                        break
+                                    else: 
+                                        select_List.remove(block)
             if event.type == pygame.MOUSEBUTTONUP:
                 for button in ButtonList:
                     button.press_up()
+            if event.type == pygame.KEYDOWN:
+                if not inputbox.islocked:
+                    if event.key == pygame.K_BACKSPACE:
+                        inputbox.delete()
+                    elif event.key == pygame.K_DELETE:
+                        inputbox.clear()
+                    elif event.key in (list(range(48, 58)) + list(range(256, 266)) + list(range(97, 123))):
+                        inputbox.get_char(pygame.key.name(event.key).strip('[]'))
+
+            
 
         ## 程序逻辑更新部分
         # dice_button 事件
@@ -1194,7 +1344,10 @@ def main():
         if menu == 'main':
             if eventbox.text == '' or eventbox.text == '请选择要进行的操作：':
                 eventbox.update_text('请选择项目')
-            button1.update_text('买地')
+            if not active_player.bankrupted:
+                button1.update_text('买地')
+            else:
+                button1.update_text('支付欠款')
             button2.update_text('背包')
             button3.update_text('设置')
             button4.update_text('操作')
@@ -1266,6 +1419,7 @@ def main():
                 moneybox.need_update = True
                 messagebox.need_update = True
                 button1.isLocked = False
+                enable_selectList = []
             if button1.click():
                 select_stat = 'selected'
                 build = False
@@ -1337,6 +1491,7 @@ def main():
                 select_List.clear()
                 moneybox.need_update = True
                 messagebox.need_update = True
+                enable_selectList = []
             if button1.click():
                 select_stat = 'selected'
                 blockname = ''
@@ -1408,6 +1563,7 @@ def main():
                 moneybox.need_update = True
                 messagebox.need_update = True
                 button1.isLocked = False
+                enable_selectList = []
             if button1.click():
                 select_stat = 'selected'
                 blockname = ''
@@ -1438,18 +1594,79 @@ def main():
         # # #交易
         elif menu == 'deal': 
             dice_button.isLocked = True
-            enable_selectList = active_player.enable_dealList
             if not select_stat or select_stat == 'selected':
                 select_stat = 'begin'
             button1.isLocked = True
             button2.isLocked = True
-            if select_List: 
-                button1.isLocked = False
-                button2.isLocked = False
+            if selectplayer:
+                enable_selectList = active_player.enable_dealList + [selectplayer]
+                if select_List and inputbox.text: 
+                    button1.isLocked = False
+                    button2.isLocked = False
+            else:
+                enable_selectList = active_player.enable_dealList + PlayerList
+                enable_selectList.remove(active_player)
             button1.update_text('确定')
             button2.update_text('取消')
             button3.hide()
             button4.update_text('返回')
+            if select_List and selectplayer:
+                eventbox.update_text('选择了{}块土地\n交易对象：{}'.format(len(select_List), selectplayer.name))
+                eventbox.need_update = True
+            elif select_stat == 'selecting' and not '继续交易' in eventbox.text:
+                eventbox.update_text('请点击需要交易的土地以及交易玩家\n并输入期望的交易金额：')
+                eventbox.need_update = True
+                inputbox.show()
+                inputbox.mode = 'num'
+            if button4.click():
+                menu = 'handle'
+                select_stat = ''
+                for block in active_player.building_list + PlayerList:
+                    block.need_select = False
+                    block.selected = False
+                    block.need_update = True
+                select_List.clear()
+                selectplayer = None
+                moneybox.need_update = True
+                messagebox.need_update = True
+                button1.isLocked = False
+                inputbox.hide()
+                enable_selectList = []
+            if button1.click():
+                select_stat = 'selected'
+                price = int(inputbox.text)
+                enable_deal = False
+                complete = False
+                blockname = ''
+                if selectplayer:
+                    if selectplayer.money > price:
+                        enable_deal = True
+                for block in select_List + [selectplayer]:
+                    if enable_deal and isinstance(block, Block):
+                        blockname += block.name + '、'
+                        if active_player.deal(block, selectplayer):
+                            complete = True
+                    block.selected = False
+                    block.need_update = True
+                if enable_deal and complete and price and selectplayer:
+                    messagebox.add_rolltext('玩家：{}，将{}以{}元PY交易给了{}'.format(active_player.name, blockname.strip('、'), price
+                                            , selectplayer.name), force_update=True)
+                    messagebox.need_update = True
+                    active_player.money += price
+                    selectplayer.money -= price
+                    eventbox.update_text('交易成功！\n请继续交易或者返回')
+                else:
+                    eventbox.update_text('交易失败！\n请继续交易或者返回')
+                    messagebox.need_update = True
+                select_List.clear()
+                selectplayer = None
+                inputbox.clear()
+            if button2.click():
+                for block in select_List + [selectplayer]:
+                    block.selected = False
+                select_List.clear()
+                selectplayer = None
+                inputbox.clear()
 
                 
 
@@ -1470,9 +1687,9 @@ def main():
 
         # 移动结束后的事件：
         if active_player.needmove == False and active_player.needjump == False and menu == 'main':
-            dice_button.isLocked = False
+            if not active_player.bankrupted:
+                dice_button.isLocked = False
             if displaybox_init and not active_player.operate:
-                # dice_button.isLocked = False
                 text = '玩家：{}\n来到了{}'.format(active_player.name, active_player.block.name)
                 if active_player.block.isbuilding == 0:
                     messagebox.add_rolltext(text)
@@ -1484,26 +1701,42 @@ def main():
                         if button1.click() and menu == 'main':
                             messagebox.add_rolltext(active_player.buy_Block(active_player.block))
                             active_player.operate = True
-                        else:
+                        elif not active_player.bankrupted:
                             messagebox.add_rolltext(text)
-                    elif active_player.block.owner != active_player:
+                    elif active_player.block.owner != active_player and menu == 'main':
                         if active_player.need_pay:
                             dice_button.isLocked = True
-                            messagebox.add_rolltext(text)
-                            charge = active_player.block.get_charge(dice)
+                            if not active_player.bankrupted:
+                                messagebox.add_rolltext(text)
+                            if not active_player.bankrupted:
+                                charge = active_player.block.get_charge(dice)
                             if charge:
-                                dice_button.isLocked = False
-                                paytext = active_player.pay(int(charge), dice, active_player.block.owner)
-                                dice.charge_rolled = False
-                                text_charge = ('玩家：{}\n走到了{}的{},真是不幸\n{}'
-                                               .format(active_player.name, active_player.block.owner.name,
-                                                       active_player.block.isbuilding != 1
-                                                       and '产业' or (active_player.block.hotal and '旅馆' or (
-                                                               active_player.block.houseNum and '房子'
-                                                               or '土地')), paytext))
-                                eventbox.update_text(text_charge)
-                                messagebox.add_rolltext(text_charge)
-                                active_player.operate = True
+                                if not active_player.bankrupted:
+                                    dice_button.isLocked = False
+                                    paytext = active_player.pay(int(charge), dice, active_player.block.owner)
+                                    dice.charge_rolled = False    
+                                    text_charge = ('玩家：{}\n走到了{}的{},真是不幸\n{}'
+                                                .format(active_player.name, active_player.block.owner.name,
+                                                        active_player.block.isbuilding != 1
+                                                        and '产业' or (active_player.block.hotal and '旅馆' or (
+                                                                active_player.block.houseNum and '房子'
+                                                                or '土地')), paytext))
+                                    messagebox.add_rolltext(text_charge)
+                                    if '破产' in paytext:
+                                        active_player.bankrupted = True
+                                    else:
+                                        active_player.operate = True
+                                        eventbox.update_text(text_charge)
+                                else:
+                                    eventbox.update_text('玩家：{}\n请支付欠款'.format(active_player.name))
+                                    if button1.click() and menu == 'main':
+                                        if active_player.money >= charge:
+                                            active_player.money -= charge
+                                            active_player.bankrupted = False
+                                            text_charge = '玩家：{}\n支付了欠款'.format(active_player.name)
+                                            messagebox.add_rolltext(text_charge)
+                                            eventbox.add_rolltext(text_charge)
+                                            active_player.operate = True              
                     elif active_player.block.owner == active_player and not active_player.operate:
                         messagebox.add_rolltext(text)
                         dice_button.isLocked = False
@@ -1522,15 +1755,16 @@ def main():
                 fix_screen.blit(draw.get_Surface(), (draw.x, draw.y))
         screen = fix_screen.copy()
 
+        # 选择时绘图序列
+        if select_stat:
+            for block in building_list + [inputbox]:
+                screen.blit(block.get_Surface(), (block.x, block.y))
+
         # 实时绘图序列
         DrawList = DiceList + PlayerList  # 考虑后续逻辑更新，骰子必须先行绘制
         # 实时更新的绘图序列
         for draw in DrawList:
             screen.blit(draw.get_Surface(), (draw.x, draw.y))
-        # 选择时绘图序列
-        if select_stat:
-            for block in building_list:
-                screen.blit(block.get_Surface(), (block.x, block.y))
 
         background.blit(screen, (- LINEWIDTH / 2, - LINEWIDTH / 2))
         pygame.display.flip()
