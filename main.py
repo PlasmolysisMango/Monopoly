@@ -946,6 +946,7 @@ class Player(object):
                 self.money -= int(targetblock.blockprice * 0.6)
                 targetblock.mortgage = False
                 targetblock.need_select = False
+                self.ownblockList.append(targetblock)
                 self.update()
                 return True
             else:
@@ -1010,8 +1011,6 @@ class Player(object):
                 targetblock.owner = targetplayer
                 targetblock.need_select = False
                 targetplayer.owntransportList.append(targetblock)
-            else:
-                return False
             self.update()
             targetplayer.update()
             return True
@@ -1031,7 +1030,7 @@ class Player(object):
                 message = '{}支付{}元'.format(dice.charge_rolled and '掷出{}点，'.format(dice.rollsum) or '', price)
                 self.need_pay = False
             else:
-                message = '金钱不足，濒临破产！'
+                message = '需要支付{}元，金钱不足，濒临破产！'.format(price)
         return message
     
 class SpecialEvent(object):
@@ -1041,6 +1040,15 @@ class SpecialEvent(object):
         self.active_player = active_player
     
     def chance(self, mode = 'random'):
+        if mode == 'random':
+            mode = random.randint(1, 10)
+        elif mode == 1:
+            pass
+
+    def blessing(self):
+        pass
+
+    def skill(self):
         pass
 
         
@@ -1173,19 +1181,19 @@ def main():
     player_disy = int(building_list[0].h * 0.2)
     player1 = Player('黑子', iconDict['黑子'], building_list[0], 0, building_list)
     player2 = Player('泪子', iconDict['泪子'], building_list[0], 1, building_list)
-    player3 = Player('初春', iconDict['初春'], building_list[0], 2, building_list)
-    player4 = Player('当麻', iconDict['当麻'], building_list[0], 3, building_list)
+    player3 = Player('食蜂', iconDict['食蜂'], building_list[0], 2, building_list)
+    player4 = Player('警策', iconDict['警策'], building_list[0], 3, building_list)
     PlayerList.extend([player1, player2, player3, player4])
     random.shuffle(PlayerList)
     active_player = player1
 
     # 测试用
-    player1.money = 100000
-    for block in building_list:
-        player1.buy_Block(block)
-    player2.money = 50
-    player3.money = 50
-    player4.money = 1000
+    # player1.money = 100000
+    # for block in building_list:
+    #     player1.buy_Block(block)
+    # player2.money = 50
+    # player3.money = 50
+    # player4.money = 1000
 
     # //各类控件：
     # 文字显示框实例化：
@@ -1639,7 +1647,7 @@ def main():
                 complete = False
                 blockname = ''
                 if selectplayer:
-                    if selectplayer.money > price:
+                    if selectplayer.money >= price:
                         enable_deal = True
                 for block in select_List + [selectplayer]:
                     if enable_deal and isinstance(block, Block):
@@ -1647,7 +1655,6 @@ def main():
                         if active_player.deal(block, selectplayer):
                             complete = True
                     block.selected = False
-                    block.need_update = True
                 if enable_deal and complete and price and selectplayer:
                     messagebox.add_rolltext('玩家：{}，将{}以{}元PY交易给了{}'.format(active_player.name, blockname.strip('、'), price
                                             , selectplayer.name), force_update=True)
@@ -1735,7 +1742,7 @@ def main():
                                             active_player.bankrupted = False
                                             text_charge = '玩家：{}\n支付了欠款'.format(active_player.name)
                                             messagebox.add_rolltext(text_charge)
-                                            eventbox.add_rolltext(text_charge)
+                                            eventbox.update_text(text_charge)
                                             active_player.operate = True              
                     elif active_player.block.owner == active_player and not active_player.operate:
                         messagebox.add_rolltext(text)
@@ -1749,7 +1756,7 @@ def main():
         ## 画面更新部分
 
         # 改变时绘图序列
-        bgd_drawList = DisplayBoxList + ButtonList + (select_stat and [] or building_list)
+        bgd_drawList = DisplayBoxList + ButtonList + (not select_stat and building_list or [])
         for draw in bgd_drawList:
             if draw.need_update:
                 fix_screen.blit(draw.get_Surface(), (draw.x, draw.y))
