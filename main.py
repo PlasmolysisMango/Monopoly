@@ -1737,6 +1737,8 @@ def main():
                     if active_player.block.name == '监狱' or True:
                         active_player.prison = 1
                         messagebox.add_rolltext('玩家：{}自投罗网，入狱1回合'.format(active_player.name))
+                        if dice.isbonis:
+                            dice.isbonis = False
                         active_player.operate = True
                 elif active_player.block.isbuilding != 0:
                     if not active_player.block.owner and menu == 'main':
