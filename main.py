@@ -691,6 +691,7 @@ class Player(object):
         self.need_select = False
         self.selected = False
         self.bankrupted = False
+        self.prison = 0
 
     def get_position(self, block):
         c_x, c_y = block.get_centerPos()
@@ -1250,6 +1251,7 @@ def main():
     inputbox = InputBox([300, 420, 300, 50], visible = False, lock = True)
     select_List = []
     selectplayer = None
+    # 一些全局存储的变量
     charge = None
     while isStart:
         # 事件处理部分
@@ -1324,15 +1326,22 @@ def main():
                 button3.show()
                 button4.show()
             dice_button.isLocked = True
-            if not dice.isbonis:
-                active_player = PlayerList[dice_button.Pressed_time]
-            else:
+            if dice.isbonis and not active_player.prison:
                 dice_button.Pressed_time -= 1
             dice_button.Pressed_time += 1
-            active_player.init()
-            active_player.needjump = True
             if dice_button.Pressed_time >= len(PlayerList):
                 dice_button.Pressed_time = 0
+            if PlayerList[dice_button.Pressed_time].prison:
+                tmp_player = PlayerList[dice_button.Pressed_time]
+                tmp_player.prison -= 1
+                messagebox.add_rolltext('玩家：{}入狱，'.format(tmp_player.name) + (tmp_player.prison and '还剩{}回合'
+                                        .format(tmp_player.prison) or '即将出狱'))
+                dice_button.Pressed_time += 1
+            if dice_button.Pressed_time >= len(PlayerList):
+                dice_button.Pressed_time = 0
+            active_player = PlayerList[dice_button.Pressed_time]
+            active_player.init()
+            active_player.needjump = True
             dice.needroll = True
 
         # 方块选择状态：
@@ -1359,6 +1368,10 @@ def main():
             button2.update_text('背包')
             button3.update_text('设置')
             button4.update_text('操作')
+            if active_player.prison:
+                button4.isLocked = True
+            else:
+                button4.isLocked = False
             if button4.isWorked:
                 menu = 'handle'
                 button4.isWorked = False
@@ -1367,13 +1380,32 @@ def main():
             if button2.click():
                 pass
             if button3.click():
-                pass
+                menu = 'setting'
         # # 背包
         elif menu == 'pack':
             pass
         # # 设置
         elif menu == 'setting':
-            pass
+            dice_button.isLocked = True
+            if not '音乐' in button1.text:
+                button1.update_text('音乐：开')
+            button2.update_text('保存')
+            button3.update_text('读取')
+            button4.update_text('返回')
+            if button4.click():
+                menu = 'main'
+            if button1.click():
+                if button1.text == '音乐：开':
+                    button1.update_text('音乐：关')
+                    pygame.mixer.music.pause()
+                elif button1.text == '音乐：关':
+                    button1.update_text('音乐：开')
+                    pygame.mixer.music.unpause()
+            if button2.click():
+                pass
+            if button3.click():
+                pass
+
         # # 操作
         elif menu == 'handle':
             dice_button.isLocked = True
@@ -1702,6 +1734,10 @@ def main():
                     messagebox.add_rolltext(text)
                     eventbox.update_text(text)
                     active_player.operate = True
+                    if active_player.block.name == '监狱' or True:
+                        active_player.prison = 1
+                        messagebox.add_rolltext('玩家：{}自投罗网，入狱1回合'.format(active_player.name))
+                        active_player.operate = True
                 elif active_player.block.isbuilding != 0:
                     if not active_player.block.owner and menu == 'main':
                         eventbox.update_text('玩家：{}\n是否购买{}？'.format(active_player.name, active_player.block.name))
@@ -1756,7 +1792,7 @@ def main():
         ## 画面更新部分
 
         # 改变时绘图序列
-        bgd_drawList = DisplayBoxList + ButtonList + (not select_stat and building_list or [])
+        bgd_drawList = DisplayBoxList + ButtonList + (not select_stat and building_list or []) # A and B or C 运算符应保证B为真
         for draw in bgd_drawList:
             if draw.need_update:
                 fix_screen.blit(draw.get_Surface(), (draw.x, draw.y))
