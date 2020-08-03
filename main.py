@@ -386,6 +386,7 @@ class Dice(object):
         self.charge_rolled = False
         self.charge_needroll = False
         self.need_update = True
+        self.isbonis = False
 
     def get_randomList(self):
         rollList = []
@@ -687,11 +688,13 @@ class Player(object):
         # 游戏中需要初始化的一些属性
         self.need_pay = False
         self.operate = False
+        self.bonus_count = 0
         self.need_update = True
         self.need_select = False
         self.selected = False
         self.bankrupted = False
         self.prison = 0
+        self.prison_passport = 0
 
     def get_position(self, block):
         c_x, c_y = block.get_centerPos()
@@ -732,6 +735,13 @@ class Player(object):
             if self.selected:
                 surface = self.icon.copy()
                 pygame.draw.rect(surface, RED, [0, 0, self.rect.w, self.rect.h], LINEWIDTH)
+                return surface
+            if self.prison:
+                surface = self.icon.copy()
+                r = int(self.rect.w / 2)
+                x = int(0.7071 * r)
+                pygame.draw.circle(surface, RED, [r, r], r, LINEWIDTH)
+                pygame.draw.line(surface, RED, [r - x, r - x], [r + x, r + x], LINEWIDTH)
                 return surface
         return self.icon
 
@@ -812,8 +822,11 @@ class Player(object):
                 self.needjump = False
                 self.needmove = True
                 self.speed = None
+    def change_pos(self, targetblock):
+        self.position = self.x, self.y = self.i_x, self.i_y = self.get_position(targetblock)
+        self.block = targetblock
 
-                # 下面是一些游戏方法：
+    # 下面是一些游戏方法：
     def select(self):
         if not self.selected:
             self.selected = True
@@ -913,7 +926,7 @@ class Player(object):
     def construct_house(self, targetblock):  # 建造房屋
         if targetblock.isbuilding == 1:
             if targetblock.colorname in self.enable_colorList:
-                if self.money > targetblock.newbuilding_price:
+                if self.money >= targetblock.newbuilding_price:
                     if targetblock.houseNum < 4 and not targetblock.hotal:
                         targetblock.houseNum += 1
                         self.money -= targetblock.newbuilding_price
@@ -1034,6 +1047,15 @@ class Player(object):
                 message = '需要支付{}元，金钱不足，濒临破产！'.format(price)
         return message
     
+    def asset_statistics(self):
+        sum = 0
+        for block in self.ownblockList:
+            num = block.hotal and 5 or block.houseNum
+            sum += block.blockprice + block.newbuilding_price * num
+        for block in self.ownpubicList + self.owntransportList:
+            sum += block.blockprice
+        return int(sum * 0.5)
+    
 class SpecialEvent(object):
     def __init__(self, building_list, PlayerList, active_player):
         self.building_list = building_list
@@ -1041,10 +1063,164 @@ class SpecialEvent(object):
         self.active_player = active_player
     
     def chance(self, mode = 'random'):
+        operate = True
+        if self.active_player.enable_blockList:
+            build = 3
+        else: 
+            build = 1
+        if self.active_player.enable_mortgageList:
+            mortgage = 3
+            loseblock = 2
+        else:
+            mortgage = 1
+            loseblock = 1
         if mode == 'random':
-            mode = random.randint(1, 10)
-        elif mode == 1:
-            pass
+            mode = random.choices(range(1,10), [5, 5, 4, 4, build, mortgage, 1, 1, 2, loseblock, 3, 3, 2, 2]) 
+
+        if mode == 1: # 随机获得金钱事件 
+            money = random.randint(1, 4) * 50
+            message = '玩家：{}抽中大奖，获得{}元'.format(self.active_player.name, money)
+            self.active_player.money += money
+
+        if mode == 2: # 随机失去金钱事件
+            money = random.randint(1, 4) * 50
+            message = '玩家：{}出门掉坑，支付医药费{}元'.format(self.active_player.name, money)
+            if self.active_player.money < money:
+                self.active_player.bankrupted = True
+                return [money, message]
+            self.active_player.money -= money
+
+        if mode == 3: # 随机退税事件
+            money = int(self.active_player.asset_statistics() * 0.1)
+            message = '玩家：{}被免除所得税，得到{}元'.format(self.active_player.name, money)
+            self.active_player.money += money
+
+        if mode == 4: # 随机收税事件
+            money = int(self.active_player.asset_statistics() * 0.1)
+            message = '玩家：{}被征收所得税，支付{}元'.format(self.active_player.name, money)
+            if self.active_player.money < money:
+                self.active_player.bankrupted = True
+                return [money, message]
+            self.active_player.money -= money
+
+        if mode == 5: # 随机加盖事件
+            if self.active_player.enable_blockList:
+                block = random.choice(self.active_player.enable_blockList)
+                if block.houseNum == 4:
+                    block.hotal = True
+                    block.houseNum = 0
+                else:
+                    block.houseNum += 1
+                message = '玩家：{}邂逅富婆，{}加盖一层'.format(self.active_player.name, block.name)
+                block.need_update = True
+                self.active_player.update()
+            else:
+                message = '玩家：{}邂逅富婆，惨遭嫌弃'.format(self.active_player.name)
+            
+        if mode == 6: # 随机拆房事件
+            if self.active_player.enable_mortgageList:
+                block = random.choice(self.active_player.enable_mortgageList)
+                if block.hotal:
+                    block.hotal = False
+                    block.houseNum = 4
+                elif block.houseNum:
+                    block.houseNum -= 1
+                else:
+                    block.mortgage = True
+                block.need_update = True
+                self.active_player.update()
+                message = '玩家：{}遇到拆迁队，{}抵押一次'.format(self.active_player.name, block.name)
+            else:
+                message = '玩家：{}遇到拆迁队，所幸并没有地'.format(self.active_player.name)
+            
+        if mode == 7: # 全体加盖事件
+            for player in self.PlayerList:
+                for block in player.enable_blockList:
+                    if block.houseNum == 4:
+                        block.hotal = True
+                        block.houseNum = 0
+                    else:
+                        block.houseNum += 1
+                    block.need_update = True
+                player.update()
+            message = '全市大基建，所有玩家全体加盖一层'
+
+        if mode == 8: # 全体拆迁事件
+            for player in self.PlayerList:
+                for block in player.enable_mortgageList:
+                    if block.hotal:
+                        block.hotal = False
+                        block.houseNum = 4
+                    elif block.houseNum:
+                        block.houseNum -= 1
+                    else:
+                        block.mortgage = True
+                    block.need_update = True
+                player.update()
+            message = '全市大拆迁，所有玩家全体抵押一次'
+
+        if mode == 9: # 随机获得地皮事件
+            blis = []
+            for block in self.building_list:
+                if not block.owner and block.isbuilding:
+                    blis.append(block)
+            if blis:
+                block = random.choice(blis)
+                block.owner = self.active_player
+                block.need_update = True
+                self.active_player.update()
+                message = '玩家：{}结识阔少，获赠{}'.format(self.active_player.name, block.name)
+            else:
+                message = '玩家：{}结识阔少，可惜地已经被买光了'.format(self.active_player.name)
+
+        if mode == 10: # 随机失去地皮事件
+            blis = []
+            for block in self.active_player.enable_mortgageList:
+                if not block.houseNum and not block.hotal:
+                    blis.append(block)
+            if blis:
+                block = random.choice(blis)
+                block.owner = None
+                block.need_update = True
+                self.active_player.update()
+                message = '玩家：{}遭遇恶霸，失去{}'.format(self.active_player.name, block.name)
+            else:
+                message = '玩家：{}遭遇恶霸，所幸什么也没有发生'.format(self.active_player.name)
+
+        if mode == 11: # 随机慈善事件
+            money = random.randint(1, 3) * 60
+            message = '玩家：{}善心大发，支付{}元分给其他所有玩家'.format(self.active_player.name, money)
+            if self.active_player.money < money:
+                self.active_player.bankrupted = True
+                return [money, message]
+            self.active_player.money -= money
+            for player in self.PlayerList:
+                if player != self.active_player: 
+                    player.money += int(money / (len(self.PlayerList) - 1))
+                    
+        if mode == 12: # 监狱通行证
+            message = '玩家：{}行侠仗义，得到监狱通行证一张'.format(self.active_player.name)
+            self.active_player.prison_passport += 1
+
+        if mode == 13: # 监狱一日游
+            message = '玩家：{}无恶不作，奖励监狱一日游'.format(self.active_player.name)
+            dstblock = None
+            for block in self.building_list:
+                if block.name == '监狱':
+                    dstblock = block
+                    break
+            self.active_player.change_pos(dstblock)
+            operate = False
+
+        if mode == 14: # 随机传送
+            operate = False
+            dstblock = random.choice(self.building_list)
+            message = '玩家：{}进入任意门，被传送至{}'.format(self.active_player.name, dstblock.name)
+            self.active_player.change_pos(dstblock)
+            operate = False
+        if operate:
+            self.active_player.operate = True
+        return message
 
     def blessing(self):
         pass
@@ -1253,6 +1429,7 @@ def main():
     selectplayer = None
     # 一些全局存储的变量
     charge = None
+    specialblock = SpecialEvent(building_list, PlayerList, active_player)
     while isStart:
         # 事件处理部分
         for event in pygame.event.get():
@@ -1339,10 +1516,25 @@ def main():
                 dice_button.Pressed_time += 1
             if dice_button.Pressed_time >= len(PlayerList):
                 dice_button.Pressed_time = 0
-            active_player = PlayerList[dice_button.Pressed_time]
-            active_player.init()
-            active_player.needjump = True
-            dice.needroll = True
+            if active_player == PlayerList[dice_button.Pressed_time]:
+                active_player.bonus_count += 1
+            else:
+                active_player.bonus_count = 0
+                active_player = PlayerList[dice_button.Pressed_time]
+            if active_player.bonus_count >=3:
+                if not active_player.prison_passport: 
+                    messagebox.add_rolltext('玩家：{}因为太欧入狱'.format(active_player.name)) #待测试
+                    active_player.prison += 1
+                else:
+                    messagebox.add_rolltext('玩家：{}因为太欧入狱，使用监狱通行证免于牢狱之灾'.format(active_player.name))
+                    active_player.prison_passport -= 1
+                    active_player.init()
+                    active_player.needjump = True
+                    dice.needroll = True
+            else:
+                active_player.init()
+                active_player.needjump = True
+                dice.needroll = True
 
         # 方块选择状态：
         if select_stat == 'begin':
@@ -1353,10 +1545,25 @@ def main():
         # 菜单更新部分
         change_buttonList = [button1, button2, button3, button4]
         for button in change_buttonList:
-            if active_player.needjump or active_player.needmove:
+            if active_player.needjump or active_player.needmove or dice.needroll:
                 button.isLocked = True
             else:
                 button.isLocked = False
+        # 破产判定：
+        if active_player.bankrupted:
+            if active_player.asset_statistics() < charge:
+                menu = 'game_end'
+                dice_button.update_text('结束游戏')
+                for button in change_buttonList:
+                    button.isLocked = True
+                text = '结算：\n'
+                for player in PlayerList:
+                    if player != active_player:
+                        text += '玩家：{}，总资产：{}元\n'.format(player.name, player.asset_statistics())
+                text += '玩家：{}不幸破产，游戏结束！'.format(active_player.name)
+                eventbox.update_text(text)
+                eventbox.size = 10
+
         # 主菜单
         if menu == 'main':
             if eventbox.text == '' or eventbox.text == '请选择要进行的操作：':
@@ -1370,8 +1577,6 @@ def main():
             button4.update_text('操作')
             if active_player.prison:
                 button4.isLocked = True
-            else:
-                button4.isLocked = False
             if button4.isWorked:
                 menu = 'handle'
                 button4.isWorked = False
@@ -1724,6 +1929,7 @@ def main():
             active_player.thoughstart = False
         moneybox.update_text('当前玩家：\n{}'.format(active_player.name) + '\n金钱：{}元'.format(active_player.money))
 
+        
         # 移动结束后的事件：
         if active_player.needmove == False and active_player.needjump == False and menu == 'main':
             if not active_player.bankrupted:
@@ -1731,15 +1937,40 @@ def main():
             if displaybox_init and not active_player.operate:
                 text = '玩家：{}\n来到了{}'.format(active_player.name, active_player.block.name)
                 if active_player.block.isbuilding == 0:
-                    messagebox.add_rolltext(text)
-                    eventbox.update_text(text)
-                    active_player.operate = True
-                    if active_player.block.name == '监狱' or True:
-                        active_player.prison = 1
-                        messagebox.add_rolltext('玩家：{}自投罗网，入狱1回合'.format(active_player.name))
-                        if dice.isbonis:
-                            dice.isbonis = False
-                        active_player.operate = True
+                    if not active_player.bankrupted:
+                        messagebox.add_rolltext(text)
+                        eventbox.update_text(text)
+                        if active_player.block.name == '监狱':
+                            if not active_player.prison_passport:
+                                active_player.prison = 1
+                                messagebox.add_rolltext('玩家：{}自投罗网，入狱一回合'.format(active_player.name))
+                                if dice.isbonis:
+                                    dice.isbonis = False
+                            else:
+                                active_player.prison_passport -= 1
+                                messagebox.add_rolltext('玩家：{}使用了监狱通行证，免于牢狱之灾'.format(active_player.name))
+                            active_player.operate = True
+                        elif active_player.block.name == '机会' or True:
+                            specialblock.active_player = active_player
+                            receive = specialblock.chance()
+                            if isinstance(receive, str):
+                                messagebox.add_rolltext(receive)
+                            else:
+                                charge = receive[0]
+                                t_text = receive[1] + '\n濒临破产，需支付欠款{}元'.format(active_player.name, charge)
+                                eventbox.update_text(t_text, mode = 'add')
+                                messagebox.add_rolltext(t_text)
+                    else:
+                        if button1.click() and menu == 'main':
+                            if active_player.money >= charge:
+                                active_player.money -= charge
+                                active_player.bankrupted = False
+                                text_charge = '玩家：{}\n支付了欠款'.format(active_player.name)
+                                messagebox.add_rolltext(text_charge)
+                                eventbox.update_text(text_charge)
+                                active_player.operate = True      
+                    
+
                 elif active_player.block.isbuilding != 0:
                     if not active_player.block.owner and menu == 'main':
                         eventbox.update_text('玩家：{}\n是否购买{}？'.format(active_player.name, active_player.block.name))
