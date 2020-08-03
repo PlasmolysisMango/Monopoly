@@ -386,7 +386,7 @@ class Dice(object):
         self.charge_rolled = False
         self.charge_needroll = False
         self.need_update = True
-        self.isbonis = False
+        self.isbonus = False
 
     def get_randomList(self):
         rollList = []
@@ -396,7 +396,6 @@ class Dice(object):
             rollList.append(t)
             rollsum += t
         self.rollsum = rollsum
-        self.isbonis = self.issameList(rollList)
         return rollList
 
     def issameList(self, lis):
@@ -463,6 +462,7 @@ class Dice(object):
                 if self.rolltime > self.rate:  # 显示结果时
                     self.passedtime = 0
                     self.rolltime = 0
+                    self.isbonus = self.issameList(self.rollList)
                     if self.charge_needroll:
                         self.charge_needroll = False
                         self.charge_rolled = True
@@ -534,7 +534,7 @@ class Block(object):
 
     def get_charge(self, dice):  # 获取过路费
         charge = 0
-        if self.owner:
+        if self.owner and not self.owner.prison and not self.mortgage:
             if self.isbuilding == 1:
                 if self.hotal:
                     charge = self.blockprice * self.hotalcharge_rate
@@ -779,7 +779,7 @@ class Player(object):
         if self.x * sign_h - self.y * sign_w < self.i_x * sign_h - self.i_y * sign_w:
             self.block = dstblock
             if dstblock == self.building_list[0]:
-                self.money += 200
+                self.money += 150
                 self.thoughstart = True
             self.position = self.x, self.y = self.i_x, self.i_y = self.get_position(dstblock)
             self.moved_time += 1
@@ -847,11 +847,11 @@ class Player(object):
                         self.ownpubicList.append(targetblock)
                     elif targetblock.isbuilding == 3:
                         self.owntransportList.append(targetblock)
-                    message = '玩家：{}，花费{}元，购买{}成功！'.format(self.name, targetblock.blockprice, targetblock.name)
+                    message = '玩家：{}\n花费{}元\n购买{}成功！'.format(self.name, targetblock.blockprice, targetblock.name)
                     self.update()
                     targetblock.need_update = True
                 else:
-                    message = '玩家：{}，金钱不足，购买失败！'.format(self.name)
+                    message = '玩家：{}\n金钱不足\n购买失败！'.format(self.name)
             else:
                 message = '名地有主\n购买失败！'
         else:
@@ -881,7 +881,7 @@ class Player(object):
         self.enable_mortgageList.clear()
         self.enable_buybackList.clear()
         for block in self.building_list: 
-            if block.mortgage: 
+            if block.mortgage and block.owner == self: 
                 self.enable_buybackList.append(block)
         if not self.allcolorDict:
             self.allcolorDict = self.count_block_color('all')
@@ -1074,8 +1074,13 @@ class SpecialEvent(object):
         else:
             mortgage = 1
             loseblock = 1
+        if self.active_player.ownblockList or self.active_player.ownpubicList or self.active_player.owntransportList:
+            tax = 4
+        else:
+            tax = 2
+
         if mode == 'random':
-            mode = random.choices(range(1,10), [5, 5, 4, 4, build, mortgage, 1, 1, 2, loseblock, 3, 3, 2, 2]) 
+            mode = random.choices(range(1,15), [5, 5, tax, tax, build, mortgage, 1, 1, 2, loseblock, 3, 3, 2, 2])[0]
 
         if mode == 1: # 随机获得金钱事件 
             money = random.randint(1, 4) * 50
@@ -1218,6 +1223,7 @@ class SpecialEvent(object):
             message = '玩家：{}进入任意门，被传送至{}'.format(self.active_player.name, dstblock.name)
             self.active_player.change_pos(dstblock)
             operate = False
+
         if operate:
             self.active_player.operate = True
         return message
@@ -1503,7 +1509,7 @@ def main():
                 button3.show()
                 button4.show()
             dice_button.isLocked = True
-            if dice.isbonis and not active_player.prison:
+            if dice.isbonus and not active_player.prison:
                 dice_button.Pressed_time -= 1
             dice_button.Pressed_time += 1
             if dice_button.Pressed_time >= len(PlayerList):
@@ -1920,12 +1926,12 @@ def main():
             messagebox.size = 18
             messagebox.mode = '左对齐'
             messagebox.add_rolltext(
-                '玩家：{}，掷出{}点{}'.format(active_player.name, dice.rollsum, dice.isbonis and ',再掷一次' or ''))
+                '玩家：{}，掷出{}点{}'.format(active_player.name, dice.rollsum, dice.isbonus and ',再掷一次' or ''))
             if active_player.needmove:
                 active_player.dice = dice.rollsum
             dice.rolled = False
         if active_player.thoughstart == True:
-            messagebox.add_rolltext('玩家：{}经过起点，领取200元'.format(active_player.name))
+            messagebox.add_rolltext('玩家：{}经过起点，领取150元'.format(active_player.name))
             active_player.thoughstart = False
         moneybox.update_text('当前玩家：\n{}'.format(active_player.name) + '\n金钱：{}元'.format(active_player.money))
 
@@ -1944,13 +1950,13 @@ def main():
                             if not active_player.prison_passport:
                                 active_player.prison = 1
                                 messagebox.add_rolltext('玩家：{}自投罗网，入狱一回合'.format(active_player.name))
-                                if dice.isbonis:
-                                    dice.isbonis = False
+                                if dice.isbonus:
+                                    dice.isbonus = False
                             else:
                                 active_player.prison_passport -= 1
                                 messagebox.add_rolltext('玩家：{}使用了监狱通行证，免于牢狱之灾'.format(active_player.name))
                             active_player.operate = True
-                        elif active_player.block.name == '机会' or True:
+                        elif active_player.block.name == '机会':
                             specialblock.active_player = active_player
                             receive = specialblock.chance()
                             if isinstance(receive, str):
@@ -1975,8 +1981,11 @@ def main():
                     if not active_player.block.owner and menu == 'main':
                         eventbox.update_text('玩家：{}\n是否购买{}？'.format(active_player.name, active_player.block.name))
                         if button1.click() and menu == 'main':
-                            messagebox.add_rolltext(active_player.buy_Block(active_player.block))
-                            active_player.operate = True
+                            buy_text = active_player.buy_Block(active_player.block)
+                            messagebox.add_rolltext(buy_text)
+                            eventbox.update_text(buy_text)
+                            if '购买成功' in buy_text:
+                                active_player.operate = True
                         elif not active_player.bankrupted:
                             messagebox.add_rolltext(text)
                     elif active_player.block.owner != active_player and menu == 'main':
@@ -2012,7 +2021,13 @@ def main():
                                             text_charge = '玩家：{}\n支付了欠款'.format(active_player.name)
                                             messagebox.add_rolltext(text_charge)
                                             eventbox.update_text(text_charge)
-                                            active_player.operate = True              
+                                            active_player.operate = True       
+                            
+                            elif active_player.block.owner.prison:
+                                messagebox.add_rolltext('玩家：{}，由于{}入狱，免收路费'.format(active_player.name, 
+                                                        active_player.block.owner.name))
+                                dice_button.isLocked = False
+                                active_player.operate = True
                     elif active_player.block.owner == active_player and not active_player.operate:
                         messagebox.add_rolltext(text)
                         dice_button.isLocked = False
