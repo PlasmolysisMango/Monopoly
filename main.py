@@ -685,16 +685,19 @@ class Player(object):
         self.enable_buybackList = []
         self.ownpubicList = []
         self.owntransportList = []
+        self.blessingList = []
         # 游戏中需要初始化的一些属性
         self.need_pay = False
         self.operate = False
         self.bonus_count = 0
+        # 其他属性
         self.need_update = True
         self.need_select = False
         self.selected = False
         self.bankrupted = False
         self.prison = 0
         self.prison_passport = 0
+        self.skill_point = 0
 
     def get_position(self, block):
         c_x, c_y = block.get_centerPos()
