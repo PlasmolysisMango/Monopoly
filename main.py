@@ -517,10 +517,10 @@ class Block(object):
             self.colorname = color
         elif self.isbuilding == 2:  # 公共事业类型
             self.blockprice = int(blockprice)
-            self.public_charge_rate = 10
+            self.public_charge_rate = 8
         elif self.isbuilding == 3:  # 公共交通类型
             self.blockprice = int(blockprice)
-            self.transport_charge_rate = 0.25
+            self.transport_charge_rate = 0.20
         elif self.isbuilding == 0:  # 事件类型
             pass
         # 选择相关：
@@ -697,8 +697,8 @@ class Player(object):
         self.bankrupted = False
         self.prison = 0
         self.prison_passport = 0
-        self.skill_point = 0
-        self.blessing = ''
+        self.skill_point = 1
+        self.blessing = []
 
     def get_position(self, block):
         c_x, c_y = block.get_centerPos()
@@ -844,12 +844,14 @@ class Player(object):
         if targetblock.isbuilding in range(1, 4):
             if not targetblock.owner:
                 blockprice = targetblock.blockprice
-                if '买地' in self.blessing:
-                    if '增加' in self.blessing:
-                        blockprice = int(targetblock.blockprice * 1.5)
-                    elif '减少' in self.blessing:
-                        blockprice = int(targetblock.blockprice * 0.5)
-                    self.blessing = ''
+                for blessing in self.blessing:
+                    if '买地' in blessing:
+                        if '增加' in blessing:
+                            blockprice = int(targetblock.blockprice * 1.5)
+                        elif '减少' in blessing:
+                            blockprice = int(targetblock.blockprice * 0.5)
+                        self.blessing.remove(blessing)
+                        break
                 if self.money > blockprice:
                     self.money -= blockprice
                     targetblock.owner = self
@@ -942,11 +944,13 @@ class Player(object):
         if targetblock.isbuilding == 1:
             if targetblock.colorname in self.enable_colorList:
                 newbuilding_price = targetblock.newbuilding_price
-                if '加盖' in self.blessing:
-                    if '增加' in self.blessing:
-                        newbuilding_price = int(targetblock.newbuilding_price * 1.5)
-                    elif '减少' in self.blessing:
-                        newbuilding_price = int(targetblock.newbuilding_price * 0.5)
+                for blessing in self.blessing:
+                    if '加盖' in blessing:
+                        if '增加' in blessing:
+                            newbuilding_price = int(targetblock.newbuilding_price * 1.5)
+                        elif '减少' in blessing:
+                            newbuilding_price = int(targetblock.newbuilding_price * 0.5)
+                        break
                 if self.money >= newbuilding_price:
                     if targetblock.houseNum < 4 and not targetblock.hotal:
                         targetblock.houseNum += 1
@@ -1025,11 +1029,13 @@ class Player(object):
             targetblock.isbuilding == 2 and self.ownpublicList.append(targetblock) or self.owntransportList.append(targetblock)
             targetblock.need_select = False
             targetblock.mortgage = True
-        if '抵押' in self.blessing:
-            if '增加' in self.blessing:
-                sell = int(sell * 1.5)
-            elif '减少' in self.blessing:
-                sell = int(sell * 0.5)
+        for blessing in self.blessing:
+            if '抵押' in blessing:
+                if '增加' in blessing:
+                    sell = int(sell * 1.5)
+                elif '减少' in blessing:
+                    sell = int(sell * 0.5)
+                break
         self.money += int(sell)
         self.update()
         return sell
@@ -1064,12 +1070,14 @@ class Player(object):
     def pay(self, price, dice, owner):
         message = ''
         if self.need_pay:
-            if '过路' in self.blessing:
-                if '增加' in self.blessing:
-                    price = int(price * 1.5)
-                elif '减少' in self.blessing:
-                    price = int(price * 0.5)
-                self.blessing = ''
+            for blessing in self.blessing:
+                if '过路' in blessing:
+                    if '增加' in blessing:
+                        price = int(price * 1.5)
+                    elif '减少' in blessing:
+                        price = int(price * 0.5)
+                    self.blessing.remove(blessing)
+                    break
             if price <= self.money:
                 self.money -= price
                 owner.money += price
@@ -1277,11 +1285,18 @@ class SpecialEvent(object):
             self.active_player.operate = True
         return message
 
-    def blessing(self, mode = 'random'):
+    def blessing(self):
         blessing = random.choices(['买地', '过路', '抵押', '加盖'], [2, 2, 1, 1])[0]
         sign = random.choice(['增加', '减少'])
         message = blessing + '费用' + sign + '50%'
-        self.active_player.blessing = message
+        add = True
+        for single_bless in self.active_player.blessing:
+            if blessing in single_bless:
+                single_bless = message
+                add = False
+                break
+        if add:
+            self.active_player.blessing.append(message)
         self.active_player.operate = True
         return message
 
@@ -1433,6 +1448,9 @@ def main():
     # player2.money = 50
     # player3.money = 50
     # player4.money = 1000
+    # for player in PlayerList:
+    #     player.money = 500
+    #     player.skill_point = 40
 
     # //各类控件：
     # 文字显示框实例化：
@@ -1659,7 +1677,6 @@ def main():
             button4.update_text('返回')
             house = 0
             hotal = 0
-            blessing = False
             for block in active_player.ownblockList:
                 if block.houseNum:
                     house += block.houseNum
@@ -1681,7 +1698,13 @@ def main():
             if button2.click():
                 if not '祝福' in eventbox.text:
                     eventbox.size = 20
-                    eventbox.update_text('祝福：\n \n' + (active_player.blessing and ('下一次' + active_player.blessing) or '无'))
+                    b_text = '祝福：\n \n'
+                    if active_player.blessing:
+                        for blessing in active_player.blessing:
+                            b_text += '下一次{}\n'.format(blessing)
+                    else:
+                        b_text += '无'
+                    eventbox.update_text(b_text)
                 else:
                     eventbox.size = 18
                     eventbox.update_text(text)
@@ -1707,7 +1730,8 @@ def main():
             elif active_player.name == '警策':
                 skill_cost = 2
                 skill_text = '消耗({})点技能点\n获得一个额外回合'.format(skill_cost)
-            eventbox.update_text('技能描述：\n \n' + skill_text + '\n \n当前技能点：({})'.format(active_player.skill_point))
+            if not '使用' in eventbox.text:
+                eventbox.update_text('技能描述：\n \n' + skill_text + '\n \n当前技能点：({})'.format(active_player.skill_point))
             if skill_cost <= active_player.skill_point: 
                 button1.isLocked = False
             if button4.click():
@@ -1729,7 +1753,7 @@ def main():
                     else:
                         targetblock = random.choice(blis)
                         old_owner = targetblock.owner
-                        targetblock.owner.ownblockList.remove(block)
+                        targetblock.owner.ownblockList.remove(targetblock)
                         targetblock.owner.update()
                         targetblock.owner = active_player
                         active_player.ownblockList.append(targetblock)
@@ -1750,8 +1774,10 @@ def main():
                 elif active_player.name == '泪子':
                     chanceList = [1, 3, 5, 7, 9, 12, 14] # 奖金、退税、加盖、群体加盖、随机空地、监狱通行证、随机移动
                     buildrate = active_player.enable_blockList and 3 or 1
-                    heightList = [5, 5, 2 + buildrate, 0 + buildrate, 1 + (5 - buildrate), 4, 3]
+                    tax = active_player.ownblockList and 5 or 2
+                    heightList = [5, tax, 2 + buildrate, 0 + buildrate, 1 + (5 - buildrate), 4, 3]
                     chance_mode = random.choices(chanceList, heightList)[0]
+                    specialblock.active_player = active_player
                     receive = specialblock.chance(chance_mode)
                     if chance_mode == 14:
                         active_player.operate = False
@@ -1759,6 +1785,7 @@ def main():
                 elif active_player.name == '警策':
                     if not dice.isbonus:
                         dice.isbonus = True
+                        active_player.bonus_count -= 1
                         message = '玩家：{}使用液化人形获得一个额外回合'.format(active_player.name)
                     else:
                         message = '使用失败！\n已经拥有额外回合'
@@ -1867,12 +1894,14 @@ def main():
                             complete = False
                     block.selected = False
                     blockname += block.name + '、'
-                if '加盖' in active_player.blessing:
-                    if '增加' in active_player.blessing:
-                        sum = int(sum * 1.5)
-                    elif '减少' in active_player.blessing:
-                        sum = int(sum * 0.5)
-                    active_player.blessing = None
+                for blessing in active_player.blessing:
+                    if '加盖' in blessing:
+                        if '增加' in blessing:
+                            sum = int(sum * 1.5)
+                        elif '减少' in blessing:
+                            sum = int(sum * 0.5)
+                        active_player.blessing.remove(blessing)
+                        break
                 if build and complete and sum:
                     messagebox.add_rolltext('玩家：{}，花费了{}元为{}加盖了房屋'.format(active_player.name, sum, blockname.strip('、'))
                                             , force_update=True)
@@ -1940,12 +1969,14 @@ def main():
                     block.selected = False
                     block.need_update = True
                     blockname += block.name + '、'
-                if '抵押' in active_player.blessing:
-                    if '增加' in active_player.blessing:
-                        sum = int(sum * 1.5)
-                    elif '减少' in active_player.blessing:
-                        sum = int(sum * 0.5)
-                    active_player.blessing = None
+                for blessing in active_player.blessing:
+                    if '抵押' in blessing:
+                        if '增加' in blessing:
+                            sum = int(sum * 1.5)
+                        elif '减少' in blessing:
+                            sum = int(sum * 0.5)
+                        active_player.blessing.remove(blessing)
+                        break
                 if sum:
                     messagebox.add_rolltext('玩家：{}，抵押了{}得到了{}元'.format(active_player.name, blockname.strip('、'), sum)
                                             , force_update=True)
@@ -2057,7 +2088,7 @@ def main():
             button3.hide()
             button4.update_text('返回')
             if select_List and selectplayer:
-                eventbox.update_text('选择了{}块土地\n交易对象：{}'.format(len(select_List), selectplayer.name))
+                eventbox.update_text('选择了{}块土地\n交易对象：{}  金钱：{}'.format(len(select_List), selectplayer.name, selectplayer.money))
                 eventbox.need_update = True
             elif select_stat == 'selecting' and not '继续交易' in eventbox.text:
                 eventbox.update_text('请点击需要交易的土地以及交易玩家\n并输入期望的交易金额：')
@@ -2128,7 +2159,16 @@ def main():
         if active_player.thoughstart == True:
             messagebox.add_rolltext('玩家：{}经过起点，领取150元并获取(1)技能点'.format(active_player.name))
             active_player.thoughstart = False
-        moneybox.update_text('当前玩家：\n{}'.format(active_player.name) + '\n金钱：{}元'.format(active_player.money))
+        if displaybox_init:
+            moneybox.update_text('当前玩家：\n{}\n金钱：{}元'.format(active_player.name, active_player.money))
+        else:
+            p_text = '玩家顺序：\n'
+            for i in range(len(PlayerList) - 1):
+                p_text += '{}：{} '.format(i + 1, PlayerList[i + 1].name)
+                if i % 2 == 1:
+                    p_text += '\n'
+            p_text += '{}：{} '.format(len(PlayerList), PlayerList[0].name)
+            moneybox.update_text(p_text.strip('\n'))
 
         
         # 移动结束后的事件：
@@ -2169,7 +2209,6 @@ def main():
                             specialblock.active_player = active_player
                             specialblock.skill()
                             messagebox.add_rolltext('玩家：{}获得(2)技能点，目前技能点：({})'.format(active_player.name, active_player.skill_point))
-
                     else:
                         if button1.click() and menu == 'main':
                             if active_player.money >= charge:
@@ -2180,26 +2219,23 @@ def main():
                                 eventbox.update_text(text_charge)
                                 active_player.operate = True      
                     
-
                 elif active_player.block.isbuilding != 0:
                     if not active_player.block.owner and menu == 'main':
-                        eventbox.update_text('玩家：{}\n是否购买{}？'.format(active_player.name, active_player.block.name))
+                        if not '购买' in eventbox.text:
+                            eventbox.update_text('玩家：{}\n是否购买{}？'.format(active_player.name, active_player.block.name))
                         if button1.click() and menu == 'main':
                             buy_text = active_player.buy_Block(active_player.block)
                             messagebox.add_rolltext(buy_text)
                             eventbox.update_text(buy_text)
                             if '成功' in buy_text:
                                 active_player.operate = True
-                        elif not active_player.bankrupted:
-                            messagebox.add_rolltext(text)
-                        elif not '失败' in buy_text:
+                        elif not '失败' in eventbox.text and not active_player.bankrupted:
                             messagebox.add_rolltext(text)
                     elif active_player.block.owner != active_player and menu == 'main':
                         if active_player.need_pay:
                             dice_button.isLocked = True
                             if not active_player.bankrupted:
                                 messagebox.add_rolltext(text)
-                            if not active_player.bankrupted:
                                 charge = int(active_player.block.get_charge(dice))
                             if charge:
                                 if not active_player.bankrupted:
