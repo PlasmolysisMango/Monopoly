@@ -2,6 +2,7 @@ import pygame
 import pygame.freetype
 import sys
 import random
+import os
 
 # 一些常量
 WHITE = pygame.Color('white')
@@ -14,7 +15,7 @@ BLUE = 0, 0, 255
 GREY = 128, 138, 135
 BROWN = 244, 164, 95
 LINEWIDTH = 2
-FONTPATH = 'fonts\\font.ttf'
+FONTPATH = os.path.join('fonts', 'font.ttf')
 
 
 # 一些游戏控件类定义
@@ -1329,10 +1330,9 @@ def readBuildings(resList):
 # 读取头像信息
 def readIcons(width=40, height=40):
     iconDict = {}
-    path = 'pics\\icons\\'
     nameList = ['当麻', '黑子', '初春', '婚后', '警策', '美琴', '食蜂', '泪子', '削板']
     for name in nameList:
-        surf = pygame.image.load(path + name + '.png').convert_alpha()
+        surf = pygame.image.load(os.path.join('pics', 'icons', name + '.png')).convert_alpha()
         iconDict[name] = pygame.transform.scale(surf, (width, height))
     return iconDict
 
@@ -1365,14 +1365,14 @@ def main():
     size = width, height = 1600, 900
     background = pygame.display.set_mode((width, height))
     screen = pygame.Surface((width + LINEWIDTH, height + LINEWIDTH))
-    icon = pygame.image.load('pics\\icon.png')
+    icon = pygame.image.load(os.path.join('pics', 'icon.png'))
     font = pygame.freetype.Font(FONTPATH, 20)
     pygame.display.set_caption("Monopoly by PlasmolysisMango")
     pygame.display.set_icon(icon)
     # 读取图像
-    FLAG = pygame.image.load('pics\\res\\flag.png').convert_alpha()
-    HOUSE = pygame.image.load('pics\\res\\house.png').convert_alpha()
-    HOTAL = pygame.image.load('pics\\res\\hotal.png').convert_alpha()
+    FLAG = pygame.image.load(os.path.join('pics', 'res', 'flag.png')).convert_alpha()
+    HOUSE = pygame.image.load(os.path.join('pics', 'res', 'house.png')).convert_alpha()
+    HOTAL = pygame.image.load(os.path.join('pics', 'res', 'hotal.png')).convert_alpha()
     icon_width = 40
     iconDict = readIcons(icon_width, icon_width)
 
@@ -1424,7 +1424,7 @@ def main():
     INIT_SCREEN = screen.copy()  # 对象赋值会跟着变，必须使用copy方法
 
     # 播放音乐部分
-    pygame.mixer.music.load('music\\background.mp3')
+    pygame.mixer.music.load(os.path.join('music', 'background.mp3'))
     pygame.mixer.music.set_volume(0.1)
     pygame.mixer.music.play(-1)
 
