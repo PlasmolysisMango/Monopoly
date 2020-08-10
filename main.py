@@ -700,6 +700,7 @@ class Player(object):
         self.prison_passport = 0
         self.skill_point = 1
         self.blessing = []
+        self.move_sign = False
 
     def get_position(self, block):
         c_x, c_y = block.get_centerPos()
@@ -1067,6 +1068,7 @@ class Player(object):
     def init(self):  # 一次使用的判断性语句
         self.need_pay = True
         self.operate = False
+        self.move_sign = True
 
     def pay(self, price, dice, owner):
         message = ''
@@ -1448,9 +1450,9 @@ def main():
     # player2.money = 50
     # player3.money = 50
     # player4.money = 1000
-    # for player in PlayerList:
-    #     player.money = 500
-    #     player.skill_point = 40
+    for player in PlayerList:
+        player.money = 10
+        player.skill_point = 40
 
     # //各类控件：
     # 文字显示框实例化：
@@ -1779,6 +1781,7 @@ def main():
                     chance_mode = random.choices(chanceList, heightList)[0]
                     specialblock.active_player = active_player
                     receive = specialblock.chance(chance_mode)
+                    active_player.operate = False
                     if chance_mode == 14:
                         active_player.operate = False
                     message = '玩家：{}使用剧本预知触发了一次幸运机会'.format(active_player.name)
@@ -2229,8 +2232,9 @@ def main():
                             eventbox.update_text(buy_text)
                             if '成功' in buy_text:
                                 active_player.operate = True
-                        elif not '失败' in eventbox.text and not active_player.bankrupted:
+                        elif active_player.move_sign:
                             messagebox.add_rolltext(text)
+                            active_player.move_sign = False
                     elif active_player.block.owner != active_player and menu == 'main':
                         if active_player.need_pay:
                             dice_button.isLocked = True
