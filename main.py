@@ -1450,9 +1450,9 @@ def main():
     # player2.money = 50
     # player3.money = 50
     # player4.money = 1000
-    for player in PlayerList:
-        player.money = 10
-        player.skill_point = 40
+    # for player in PlayerList:
+    #     player.money = 10
+    #     player.skill_point = 40
 
     # //各类控件：
     # 文字显示框实例化：
