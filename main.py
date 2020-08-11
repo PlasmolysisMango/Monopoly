@@ -533,7 +533,7 @@ class Block(object):
             self.newbuilding_rate = 0.5
             self.blockcharge_rate = 0.2
             self.housecharge_rate = 0.5
-            self.hotalcharge_rate = 4
+            self.hotalcharge_rate = 3
             self.blockprice = int(blockprice) + int(random.randrange(-30, 30, 10))
             self.newbuilding_price = int(self.blockprice * self.newbuilding_rate)
             self.color = eval(color)
@@ -1808,7 +1808,6 @@ def main():
                     else:
                         targetblock = random.choice(blis)
                         active_player.change_pos(targetblock)
-                        # active_player.operate = False
                         message = '玩家：{}使用瞬间移动到达了{}'.format(active_player.name, targetblock.name)
                 elif active_player.name == '泪子':
                     chanceList = [1, 3, 5, 7, 9, 12, 14] # 奖金、退税、加盖、群体加盖、随机空地、监狱通行证、随机移动
@@ -1818,8 +1817,6 @@ def main():
                     chance_mode = random.choices(chanceList, heightList)[0]
                     specialblock.active_player = active_player
                     receive = specialblock.chance(chance_mode)
-                    # if chance_mode == 14:
-                    #     active_player.operate = False
                     message = '玩家：{}使用剧本预知触发了一次幸运机会'.format(active_player.name)
                 elif active_player.name == '警策':
                     if not dice.isbonus:
