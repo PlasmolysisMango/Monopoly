@@ -16,6 +16,8 @@ GREY = 128, 138, 135
 BROWN = 244, 164, 95
 LINEWIDTH = 2
 FONTPATH = os.path.join('fonts', 'font.ttf')
+INIT_MONEY = 1500
+ADD_MONEY = 150
 
 
 # 一些游戏控件类定义
@@ -529,8 +531,8 @@ class Block(object):
         self.hotal = False
         if self.isbuilding == 1:  # 可建筑类型
             self.newbuilding_rate = 0.5
-            self.blockcharge_rate = 0.1
-            self.housecharge_rate = 0.2
+            self.blockcharge_rate = 0.2
+            self.housecharge_rate = 0.5
             self.hotalcharge_rate = 4
             self.blockprice = int(blockprice) + int(random.randrange(-30, 30, 10))
             self.newbuilding_price = int(self.blockprice * self.newbuilding_rate)
@@ -563,7 +565,6 @@ class Block(object):
                 elif self.houseNum != 0:
                     charge = self.blockprice * self.housecharge_rate * self.houseNum
                 else:
-                    self.owner.update()
                     if self.colorname in self.owner.enable_colorList:
                         charge = 2 * self.blockcharge_rate * self.blockprice
                     else:
@@ -670,7 +671,7 @@ class Block(object):
 class Player(object):
     def __init__(self, name, icon, block, direction, building_list, disrate=0.25):
         self.name = name
-        self.money = 1000
+        self.money = INIT_MONEY
         self.icon = icon
         self.rect = icon.get_rect()
         self.direction = direction
@@ -807,7 +808,7 @@ class Player(object):
         if self.x * sign_h - self.y * sign_w < self.i_x * sign_h - self.i_y * sign_w:
             self.block = dstblock
             if dstblock == self.building_list[0]:
-                self.money += 150
+                self.money += ADD_MONEY
                 self.skill_point += 1
                 self.thoughstart = True
             self.position = self.x, self.y = self.i_x, self.i_y = self.get_position(dstblock)
@@ -851,6 +852,7 @@ class Player(object):
                 self.needjump = False
                 self.needmove = True
                 self.speed = None
+
     def change_pos(self, targetblock):
         self.position = self.x, self.y = self.i_x, self.i_y = self.get_position(targetblock)
         self.block = targetblock
@@ -1468,17 +1470,17 @@ def main():
     active_player = player1
 
     # 测试用
-    player1.money = 100000
-    for block in building_list:
-        if block.isbuilding:
-            player1.buy_Block(block)
-            block.mortgage = True
-            player1.update()
-    player2.money = 50
-    player3.money = 50
-    player4.money = 50
-    for player in PlayerList:
-        player.skill_point = 40
+    # player1.money = 100000
+    # for block in building_list:
+    #     if block.isbuilding:
+    #         player1.buy_Block(block)
+    #         block.mortgage = True
+    #         player1.update()
+    # player2.money = 50
+    # player3.money = 50
+    # player4.money = 50
+    # for player in PlayerList:
+    #     player.skill_point = 40
 
     # //各类控件：
     # 文字显示框实例化：
