@@ -268,7 +268,6 @@ class Button(object):
         self.isPressed_right = False
         self.isWorked = False
         self.isWorked_right = False
-        self.Pressed_time = 0
         self.isLocked = lock
         self.need_update = True
         self.isVisible = visible
@@ -282,7 +281,6 @@ class Button(object):
             y = self.avilable_rect.y - self.y
             w = self.avilable_rect.w
             h = self.avilable_rect.h
-            font = self.font
             if self.isPressed:
                 pygame.draw.rect(surface, BLACK, [x, y, w, h], 0)
                 color = WHITE
@@ -292,9 +290,12 @@ class Button(object):
             else:
                 pygame.draw.rect(surface, BLACK, [x, y, w, h], LINEWIDTH)
                 color = BLACK
-            t_surf, t_rect = font.render(self.text, color, size=self.size)
-            if mode == '居中对齐':
-                surface.blit(t_surf, (int(x + w / 2 - t_rect.w / 2), int(y + h / 2 - t_rect.h / 2)))
+            surfs, rects = self.text_render(color)
+            for i in range(len(surfs)):
+                surface.blit(surfs[i], (rects[i].x, rects[i].y))
+            # t_surf, t_rect = font.render(self.text, color, size=self.size)
+            # if mode == '居中对齐':
+            #     surface.blit(t_surf, (int(x + w / 2 - t_rect.w / 2), int(y + h / 2 - t_rect.h / 2)))
         self.need_update = False
         return surface
 
@@ -304,6 +305,25 @@ class Button(object):
         h = int(self.h * (1 - 2 * self.margin))
         w = int(self.w - 2 * self.margin * self.h)
         return pygame.Rect(x, y, w, h)
+
+    def text_render(self, color):
+        font = self.font
+        textList = self.text.split('\n')
+        surfs = []
+        rects = []
+        space = int(self.size * 0.25)  # 0.25倍行距
+        s_y = int(self.h / 2 - (len(textList) * (self.size + space) - space) / 2)
+        for i in range(len(textList)):
+            text = textList[i]
+            t_surf, t_rect = font.render(text, color, size = self.size)
+            x = int(0 + self.w / 2 - t_rect.w / 2)
+            y = int(s_y + (self.size + space) * i)
+            w = int(t_rect.w)
+            h = int(t_rect.h)
+            surfs.append(t_surf)
+            rects.append(pygame.Rect((x, y, w, h)))
+        return surfs, rects
+
 
     def press_down(self):
         if self.isVisible and not self.isLocked:
@@ -701,6 +721,7 @@ class Player(object):
         self.skill_point = 1
         self.blessing = []
         self.move_sign = False
+        self.ready = False
 
     def get_position(self, block):
         c_x, c_y = block.get_centerPos()
@@ -740,7 +761,8 @@ class Player(object):
             self.clock = pygame.time.Clock()
             if self.selected:
                 surface = self.icon.copy()
-                pygame.draw.rect(surface, RED, [0, 0, self.rect.w, self.rect.h], LINEWIDTH)
+                color = RED
+                pygame.draw.rect(surface, color, [0, 0, self.rect.w, self.rect.h], LINEWIDTH)
                 return surface
             if self.prison:
                 surface = self.icon.copy()
@@ -832,6 +854,7 @@ class Player(object):
     def change_pos(self, targetblock):
         self.position = self.x, self.y = self.i_x, self.i_y = self.get_position(targetblock)
         self.block = targetblock
+        self.init()
 
     # 下面是一些游戏方法：
     def select(self):
@@ -1427,8 +1450,9 @@ def main():
 
     # 播放音乐部分
     pygame.mixer.music.load(os.path.join('music', 'background.mp3'))
-    pygame.mixer.music.set_volume(0.1)
+    pygame.mixer.music.set_volume(0.05)
     pygame.mixer.music.play(-1)
+    pygame.mixer.music.pause()
 
     # 玩家实例化：
     PlayerList = []
@@ -1444,15 +1468,17 @@ def main():
     active_player = player1
 
     # 测试用
-    # player1.money = 100000
-    # for block in building_list:
-    #     player1.buy_Block(block)
-    # player2.money = 50
-    # player3.money = 50
-    # player4.money = 1000
-    # for player in PlayerList:
-    #     player.money = 10
-    #     player.skill_point = 40
+    player1.money = 100000
+    for block in building_list:
+        if block.isbuilding:
+            player1.buy_Block(block)
+            block.mortgage = True
+            player1.update()
+    player2.money = 50
+    player3.money = 50
+    player4.money = 50
+    for player in PlayerList:
+        player.skill_point = 40
 
     # //各类控件：
     # 文字显示框实例化：
@@ -1466,7 +1492,7 @@ def main():
 
     # 按钮实例化：
     ButtonList = []
-    dice_button = Button([700, 550, 200, 100], '骰子！')
+    dice_button = Button([700, 550, 200, 100], '点我开始！')
     button1 = Button([320, 517, 100, 50], 'button1', size=17, visible=False, lock=True)
     button2 = Button([480, 517, 100, 50], 'button2', size=17, visible=False, lock=True)
     button3 = Button([320, 583, 100, 50], 'button3', size=17, visible=False, lock=True)
@@ -1586,39 +1612,48 @@ def main():
                 button2.show()
                 button3.show()
                 button4.show()
-            dice_button.isLocked = True
-            if dice.isbonus and not active_player.prison:
-                dice_button.Pressed_time -= 1
-            dice_button.Pressed_time += 1
-            if dice_button.Pressed_time >= len(PlayerList):
-                dice_button.Pressed_time = 0
-            if PlayerList[dice_button.Pressed_time].prison:
-                tmp_player = PlayerList[dice_button.Pressed_time]
-                tmp_player.prison -= 1
-                messagebox.add_rolltext('玩家：{}入狱，'.format(tmp_player.name) + (tmp_player.prison and '还剩{}回合'
-                                        .format(tmp_player.prison) or '即将出狱'))
-                dice_button.Pressed_time += 1
-            if dice_button.Pressed_time >= len(PlayerList):
-                dice_button.Pressed_time = 0
-            if active_player == PlayerList[dice_button.Pressed_time]:
-                active_player.bonus_count += 1
-            else:
-                active_player.bonus_count = 0
-                active_player = PlayerList[dice_button.Pressed_time]
-            if active_player.bonus_count >=3:
-                if not active_player.prison_passport: 
-                    messagebox.add_rolltext('玩家：{}因为太欧入狱'.format(active_player.name)) #待测试
-                    active_player.change_pos(building_list[16])
+                dice_button.text = '{}\n点击投掷！'.format(active_player.name)
+                messagebox.size = 18
+                messagebox.mode = '左对齐'
+            if dice_button.text == '结束回合': 
+                # dice_button.isLocked = True
+                index = PlayerList.index(active_player)
+                if not dice.isbonus or active_player.prison:
+                    index += 1
+                    if index > len(PlayerList) - 1:
+                        index = 0
+                if PlayerList[index].prison:
+                    tmp_player = PlayerList[index]
+                    tmp_player.prison -= 1
+                    messagebox.add_rolltext('玩家：{}入狱，'.format(tmp_player.name) + (tmp_player.prison and '还剩{}回合'
+                                            .format(tmp_player.prison) or '即将出狱'))
+                    index = PlayerList.index(active_player)
+                if active_player == PlayerList[index]:
+                    active_player.bonus_count += 1
                 else:
-                    messagebox.add_rolltext('玩家：{}因为太欧入狱，使用监狱通行证免于牢狱之灾'.format(active_player.name))
-                    active_player.prison_passport -= 1
+                    active_player.bonus_count = 0
+                    active_player = PlayerList[index]
+                active_player.ready = True
+                dice_button.text = dice.isbonus and '再掷一次！' or '{}\n点击投掷！'.format(active_player.name)
+                eventbox.update_text('玩家：{}\n请点击投掷！'.format(active_player.name))
+            elif '掷' in dice_button.text:
+                active_player.ready = False
+                dice_button.isLocked = True
+                if active_player.bonus_count >=3:
+                    if not active_player.prison_passport: 
+                        messagebox.add_rolltext('玩家：{}因为太欧入狱'.format(active_player.name)) #待测试
+                        active_player.change_pos(building_list[16])
+                    else:
+                        messagebox.add_rolltext('玩家：{}因为太欧入狱，使用监狱通行证免于牢狱之灾'.format(active_player.name))
+                        active_player.prison_passport -= 1
+                        active_player.init()
+                        active_player.needjump = True
+                        dice.needroll = True
+                else:
                     active_player.init()
                     active_player.needjump = True
                     dice.needroll = True
-            else:
-                active_player.init()
-                active_player.needjump = True
-                dice.needroll = True
+                dice_button.text = '结束回合'
 
         # 方块选择状态：
         if select_stat == 'begin':
@@ -1721,7 +1756,7 @@ def main():
             button3.hide()
             button4.update_text('返回')
             if active_player.name == '食蜂':
-                skill_cost = 4
+                skill_cost = 5
                 skill_text = '消耗({})点技能点\n随机获得其他玩家的一块空地'.format(skill_cost)
             elif active_player.name == '黑子':
                 skill_cost = 2
@@ -1748,7 +1783,7 @@ def main():
                     for block in building_list:
                         if block.isbuilding == 1:
                             if block.owner and block.owner != active_player:
-                                if not block.houseNum and not block.hotal:
+                                if not block.houseNum and not block.hotal and not block.colorname in block.owner.enable_colorList:
                                     blis.append(block)
                     if not blis: 
                         message = '使用失败！\n没有有效的目标'
@@ -1771,7 +1806,7 @@ def main():
                     else:
                         targetblock = random.choice(blis)
                         active_player.change_pos(targetblock)
-                        active_player.operate = False
+                        # active_player.operate = False
                         message = '玩家：{}使用瞬间移动到达了{}'.format(active_player.name, targetblock.name)
                 elif active_player.name == '泪子':
                     chanceList = [1, 3, 5, 7, 9, 12, 14] # 奖金、退税、加盖、群体加盖、随机空地、监狱通行证、随机移动
@@ -1781,9 +1816,8 @@ def main():
                     chance_mode = random.choices(chanceList, heightList)[0]
                     specialblock.active_player = active_player
                     receive = specialblock.chance(chance_mode)
-                    active_player.operate = False
-                    if chance_mode == 14:
-                        active_player.operate = False
+                    # if chance_mode == 14:
+                    #     active_player.operate = False
                     message = '玩家：{}使用剧本预知触发了一次幸运机会'.format(active_player.name)
                 elif active_player.name == '警策':
                     if not dice.isbonus:
@@ -2152,8 +2186,6 @@ def main():
 
         # moneybox 和 messagebox 显示部分
         if dice.rolled:
-            messagebox.size = 18
-            messagebox.mode = '左对齐'
             messagebox.add_rolltext(
                 '玩家：{}，掷出{}点{}'.format(active_player.name, dice.rollsum, dice.isbonus and ',再掷一次' or ''))
             if active_player.needmove:
@@ -2175,7 +2207,7 @@ def main():
 
         
         # 移动结束后的事件：
-        if active_player.needmove == False and active_player.needjump == False and menu == 'main':
+        if active_player.needmove == False and active_player.needjump == False and menu == 'main' and dice_button.text == '结束回合':
             if not active_player.bankrupted:
                 dice_button.isLocked = False
             if displaybox_init and not active_player.operate:
@@ -2237,7 +2269,7 @@ def main():
                             active_player.move_sign = False
                     elif active_player.block.owner != active_player and menu == 'main':
                         if active_player.need_pay:
-                            dice_button.isLocked = True
+                            # dice_button.isLocked = True
                             if not active_player.bankrupted:
                                 messagebox.add_rolltext(text)
                                 charge = int(active_player.block.get_charge(dice))
@@ -2255,6 +2287,7 @@ def main():
                                     messagebox.add_rolltext(text_charge)
                                     if '破产' in paytext:
                                         active_player.bankrupted = True
+                                        dice_button.islocked = True
                                     else:
                                         active_player.operate = True
                                         eventbox.update_text(text_charge)
@@ -2263,6 +2296,7 @@ def main():
                                     if button1.click() and menu == 'main':
                                         if active_player.money >= charge:
                                             active_player.money -= charge
+                                            active_player.block.owner.money += charge
                                             active_player.bankrupted = False
                                             text_charge = '玩家：{}\n支付了欠款'.format(active_player.name)
                                             messagebox.add_rolltext(text_charge)
@@ -2272,11 +2306,9 @@ def main():
                             elif active_player.block.owner.prison:
                                 messagebox.add_rolltext('玩家：{}，由于{}入狱，免收路费'.format(active_player.name, 
                                                         active_player.block.owner.name))
-                                dice_button.isLocked = False
                                 active_player.operate = True
                     elif active_player.block.owner == active_player and not active_player.operate:
                         messagebox.add_rolltext(text)
-                        dice_button.isLocked = False
                         active_player.operate = True
 
         else:
