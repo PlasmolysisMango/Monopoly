@@ -1818,7 +1818,7 @@ def main():
                     chanceList = [1, 3, 5, 7, 9, 12, 14] # 奖金、退税、加盖、群体加盖、随机空地、监狱通行证、随机移动
                     buildrate = active_player.enable_blockList and 3 or 1
                     tax = active_player.ownblockList and 5 or 2
-                    heightList = [5, tax, 2 + buildrate, 0 + buildrate, 1 + (5 - buildrate), 4, 3]
+                    heightList = [5, tax, 1 + buildrate, buildrate - 1, 1 + (3 - buildrate), 4, 3]
                     chance_mode = random.choices(chanceList, heightList)[0]
                     specialblock.active_player = active_player
                     receive = specialblock.chance(chance_mode)
