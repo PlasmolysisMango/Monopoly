@@ -3,6 +3,7 @@ import pygame.freetype
 import sys
 import random
 import os
+import pickle
 
 # 一些常量
 WHITE = pygame.Color('white')
@@ -52,6 +53,15 @@ class DisplayBox(object):
         self.rollpos = 0
         self.mode = '居中对齐'
         self.number = 0
+    
+    def get_saveList(self):
+        savelis = [self.text, self.rolltext_List, self.last_text, self.rollpos, self.number]
+        return savelis
+    
+    def load_saveList(self, savelis):
+        [self.text, self.rolltext_List, self.last_text, self.rollpos, self.number] = savelis
+        self.need_update = True
+        return True
 
     def get_textList(self, in_text):  # 分割字符串实现自动换行
         textList = in_text.split('\n')
@@ -124,8 +134,6 @@ class DisplayBox(object):
             elif mode == 'add':
                 self.text += text
             self.need_update = True
-        # else:
-        #     self.need_update = False
 
     def get_Surface(self):
         if not self.oldsurface or self.need_update:
@@ -180,7 +188,6 @@ class DisplayBox(object):
                     if self.rollpos < -(len(self.rolltext_List) - self.linesNum):
                         self.rollpos = -(len(self.rolltext_List) - self.linesNum)
                     nowList = self.rolltext_List[self.rollpos - self.linesNum:self.rollpos]
-
             else:
                 nowList = self.rolltext_List
             self.text = nowList
@@ -273,7 +280,7 @@ class Button(object):
         self.isLocked = lock
         self.need_update = True
         self.isVisible = visible
-
+    
     def get_Surface(self, mode='居中对齐'):
         surface = pygame.Surface((self.w + LINEWIDTH / 2, self.h + LINEWIDTH / 2))
         surface.fill(WHITE)
@@ -292,12 +299,11 @@ class Button(object):
             else:
                 pygame.draw.rect(surface, BLACK, [x, y, w, h], LINEWIDTH)
                 color = BLACK
+            if self.isLocked:
+                color = GREY
             surfs, rects = self.text_render(color)
             for i in range(len(surfs)):
                 surface.blit(surfs[i], (rects[i].x, rects[i].y))
-            # t_surf, t_rect = font.render(self.text, color, size=self.size)
-            # if mode == '居中对齐':
-            #     surface.blit(t_surf, (int(x + w / 2 - t_rect.w / 2), int(y + h / 2 - t_rect.h / 2)))
         self.need_update = False
         return surface
 
@@ -372,6 +378,18 @@ class Button(object):
             self.isVisible = False
             self.isLocked = True
             self.need_update = True
+    
+    def unlock(self):
+        if self.isLocked:
+            self.isLocked = False
+            self.need_update = True
+            return True
+    
+    def lock(self):
+        if not self.isLocked:
+            self.isLocked = True
+            self.need_update = True
+            return True
 
     def show(self):
         if self.isVisible == False:
@@ -410,6 +428,15 @@ class Dice(object):
         self.charge_needroll = False
         self.need_update = True
         self.isbonus = False
+
+    def get_saveList(self):
+        savelis = [self.isbonus, self.rollList, self.rollsum]
+        return savelis
+    
+    def load_saveList(self, savelis):
+        [self.isbonus, self.rollList, self.rollsum] = savelis
+        self.oldsurface = None
+        return True
 
     def get_randomList(self):
         rollList = []
@@ -544,10 +571,22 @@ class Block(object):
             self.blockprice = int(blockprice)
             self.transport_charge_rate = 0.20
         elif self.isbuilding == 0:  # 事件类型
-            pass
+            self.blockprice = None
         # 选择相关：
         self.selected = False
         self.need_select = False
+        # 存档载入时重绘：
+        self.redraw = False
+    
+    def get_saveList(self):
+        savelis = [self.mortgage, self.houseNum, self.hotal, self.blockprice, self.owner and self.owner.name or None]
+        return savelis
+    
+    def load_saveList(self, savelis):
+        [self.mortgage, self.houseNum, self.hotal, self.blockprice, self.owner] = savelis
+        self.redraw = True
+        self.need_update = True
+        return True
 
     def get_centerPos(self):
         return int(self.x + self.w / 2), int(self.y + self.h / 2)
@@ -627,6 +666,12 @@ class Block(object):
         screen = pygame.Surface((self.w, self.h)).convert_alpha()
         screen.fill((0, 0, 0, 0))
         if self.isbuilding:
+            if self.redraw: # 载入时重绘
+                p_surf, p_rect = self.font.render('价格：' + str(self.blockprice) + '元', BLACK, size=15)
+                p_bgd = pygame.Surface((p_rect.w, p_rect.h))
+                p_bgd.fill((WHITE))
+                screen.blit(p_bgd, (self.w / 2 - p_rect.w / 2, self.h / 2 - p_rect.h / 2 + self.h / 5))
+                screen.blit(p_surf, (self.w / 2 - p_rect.w / 2, self.h / 2 - p_rect.h / 2 + self.h / 5))
             statusposList = self.statusposList
             bgrect = self.bgrect
             x0 = statusposList[0][0]
@@ -698,7 +743,6 @@ class Player(object):
         # 游戏中存储的一些列表
         self.ownblockList = []
         self.ownbuildingsList = []
-        self.ownhotalList = []
         self.allcolorDict = []
         self.enable_colorList = []
         self.enable_blockList = []
@@ -721,6 +765,41 @@ class Player(object):
         self.skill_point = 1
         self.blessing = []
         self.move_sign = False
+    
+    def get_saveList(self):
+        ownblock_numList = []
+        owntransport_numList = []
+        ownpublic_numList = []
+        for each in self.ownblockList + self.ownpublicList + self.owntransportList:
+            if each.isbuilding == 1:
+                ownblock_numList.append(each.number)
+            elif each.isbuilding == 2:
+                ownpublic_numList.append(each.number)
+            elif each.isbuilding == 3:
+                owntransport_numList.append(each.number)
+        savelis = [self.name, self.money, self.direction, self.fixsign, self.position, self.i_position, self.block.number, ownblock_numList
+                    , ownpublic_numList, owntransport_numList, self.bonus_count, self.bankrupted, self.prison, self.prison_passport
+                    , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y]
+        return savelis
+    
+    def load_saveList(self, savelis):
+        if savelis[0] == self.name:
+            [self.name, self.money, self.direction, self.fixsign, self.position, self.i_position, number, ownblock_numList
+            , ownpublic_numList, owntransport_numList, self.bonus_count, self.bankrupted, self.prison, self.prison_passport
+            , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y] = savelis
+            self.block = self.building_list[number]
+            for each in ownblock_numList + ownpublic_numList + owntransport_numList:
+                if self.building_list[each].isbuilding == 1:
+                    self.ownblockList.append(self.building_list[each])
+                elif self.building_list[each].isbuilding == 2:
+                    self.ownpublicList.append(self.building_list[each])
+                elif self.building_list[each].isbuilding == 3:
+                    self.owntransportList.append(self.building_list[each])
+            self.update()
+            return True
+        else:
+            return False
+        
 
     def get_position(self, block):
         c_x, c_y = block.get_centerPos()
@@ -1472,18 +1551,21 @@ def main():
     player4 = Player('警策', iconDict['警策'], building_list[0], 3, building_list)
     PlayerList.extend([player1, player2, player3, player4])
     random.shuffle(PlayerList)
+    RAW_PlayerList = PlayerList.copy()
     active_player = PlayerList[0]
 
     # 测试用
-    # player1.money = 100000
-    # for block in building_list:
-    #     if block.isbuilding:
-    #         player1.buy_Block(block)
-    #         block.mortgage = True
-    #         player1.update()
-    # player2.money = 50
-    # player3.money = 50
-    # player4.money = 50
+    player1.money = 50000
+    for block in building_list:
+        if block.isbuilding and block.number != 1:
+            player1.buy_Block(block)
+            block.hotal = True
+    player2.money = 450
+    player2.buy_Block(building_list[1])
+    # player2.prison = 1
+    # player3.prison = 1
+    player3.money = 5
+    player4.money = 5
     # for player in PlayerList:
     #     player.skill_point = 40
 
@@ -1545,6 +1627,15 @@ def main():
     # 一些全局存储的变量
     charge = None
     specialblock = SpecialEvent(building_list, PlayerList, active_player)
+    # 保存读取相关
+    S_DIR = 'saves'
+    if not os.path.exists(S_DIR):
+        os.mkdir(S_DIR)
+    s_path = os.path.join(S_DIR, 'auto.sav')
+    need_save = False
+    need_load = False
+    saveclock = pygame.time.Clock()
+    save_time = 0
     while isStart:
         # 事件处理部分
         for event in pygame.event.get():
@@ -1622,13 +1713,13 @@ def main():
                 dice_button.text = '{}\n点击投掷！'.format(active_player.name)
                 messagebox.size = 18
                 messagebox.mode = '左对齐'
-            if dice_button.text == '结束回合': 
+            elif dice_button.text == '结束回合': 
                 index = PlayerList.index(active_player)
                 if not dice.isbonus or active_player.prison:
                     index += 1
                     if index > len(PlayerList) - 1:
                         index = 0
-                if PlayerList[index].prison:
+                while PlayerList[index].prison:
                     tmp_player = PlayerList[index]
                     tmp_player.prison -= 1
                     messagebox.add_rolltext('玩家：{}入狱，'.format(tmp_player.name) + (tmp_player.prison and '还剩{}回合'
@@ -1644,7 +1735,7 @@ def main():
                 dice_button.text = dice.isbonus and '再掷一次！' or '{}\n点击投掷！'.format(active_player.name)
                 eventbox.update_text('玩家：{}\n请点击投掷！'.format(active_player.name))
             elif '掷' in dice_button.text:
-                dice_button.isLocked = True
+                dice_button.lock()
                 if active_player.bonus_count >=3:
                     if not active_player.prison_passport: 
                         messagebox.add_rolltext('玩家：{}因为太欧入狱'.format(active_player.name)) #待测试
@@ -1660,7 +1751,78 @@ def main():
                     active_player.needjump = True
                     dice.needroll = True
                 dice_button.text = '结束回合'
+            elif dice_button.text == '确认破产':
+                eventbox.size = 20
+                menu = 'main'
+                index = PlayerList.index(active_player)
+                index += 1
+                if index >= len(PlayerList):
+                    index = 0
+                b_player = active_player
+                for block in b_player.ownblockList + b_player.ownpublicList + b_player.owntransportList:
+                    block.owner = None
+                    block.need_update = True
+                active_player = PlayerList[index]
+                PlayerList.remove(b_player)
+                dice.isbonus = False
+                dice_button.text = '{}\n点击投掷！'.format(active_player.name)
+                eventbox.update_text('玩家：{}\n请点击投掷！'.format(active_player.name))
+            elif dice_button.text == '游戏结束':
+                sys.exit()
 
+        # 保存读取
+        save_time += saveclock.tick() / 1000
+        if save_time > 60.0:
+            need_save = True
+            save_time = 0
+            messagebox.add_rolltext('自动保存中...')
+        if need_save:
+            player_saveList = []
+            for player in PlayerList:
+                player_saveList.append(player.get_saveList())
+            dice_save = dice.get_saveList()
+            building_saveList = []
+            for block in building_list:
+                building_saveList.append(block.get_saveList())
+            displaybox_saveList = [moneybox.get_saveList(), messagebox.get_saveList(), eventbox.get_saveList()]
+            active_player_index = PlayerList.index(active_player)
+            savelis = (player_saveList, dice_save, building_saveList, displaybox_saveList, active_player_index, dice_button.text)
+            with open(s_path, 'wb') as f:
+                pickle.dump(savelis, f)
+            need_save = False
+            messagebox.add_rolltext('保存完成！')
+        if need_load:
+            with open(s_path, 'rb') as f:
+                loadlis = pickle.load(f)
+            (player_saveList, dice_save, building_saveList, displaybox_saveList, active_player_index, dice_button_savetext) = loadlis
+            PlayerList.clear()
+            for i in range(len(player_saveList)):
+                player_save = player_saveList[i]
+                for player in RAW_PlayerList:
+                    if player.name == player_save[0]:
+                        PlayerList.append(player)
+                        player.load_saveList(player_save)
+                        break
+            dice.load_saveList(dice_save)
+            for i in range(len(building_list)):
+                blockowner_name = building_saveList[i][-1]
+                if blockowner_name:
+                    for player in PlayerList:
+                        if player.name == blockowner_name:
+                            block_owner = player
+                            break
+                else:
+                    block_owner = None
+                building_saveList[i][-1] = block_owner
+                building_list[i].load_saveList(building_saveList[i])
+            moneybox.load_saveList(displaybox_saveList[0])
+            messagebox.load_saveList(displaybox_saveList[1])
+            eventbox.load_saveList(displaybox_saveList[2])
+            active_player = PlayerList[active_player_index]
+            dice_button.update_text(dice_button_savetext)
+            messagebox.add_rolltext('载入存档成功！')
+            need_load = False
+                
         # 方块选择状态：
         if select_stat == 'begin':
             select_stat = 'selecting'
@@ -1670,25 +1832,30 @@ def main():
         # 菜单按钮锁定部分
         change_buttonList = [button1, button2, button3, button4]
         for button in change_buttonList:
-            if active_player.needjump or active_player.needmove or dice.needroll or '投掷' in dice_button.text or active_player.prison:
-                button.isLocked = True
+            if (active_player.needjump or active_player.needmove or dice.needroll or ('掷' in dice_button.text and menu == 'main')
+                 or active_player.prison or dice.charge_needroll): 
+                button.lock()
             else:
-                button.isLocked = False
-
+                button.unlock()
+        if '掷' in dice_button.text:
+            button3.unlock()
         # 破产判定：
         if active_player.bankrupted:
             if active_player.asset_statistics() < charge:
-                menu = 'game_end'
-                dice_button.update_text('结束游戏')
+                menu = 'bankrupted'
+                if len(PlayerList) > 2:
+                    dice_button.update_text('确认破产')
+                else:
+                    dice_button.update_text('游戏结束')
                 for button in change_buttonList:
-                    button.isLocked = True
-                text = '结算：\n'
+                    button.lock()
+                text = '结算：\n \n'
                 for player in PlayerList:
                     if player != active_player:
                         text += '玩家：{}，总资产：{}元\n'.format(player.name, player.asset_statistics())
-                text += '玩家：{}不幸破产，游戏结束！'.format(active_player.name)
+                text += ' \n玩家：{}不幸破产！'.format(active_player.name)
                 eventbox.update_text(text)
-                eventbox.size = 10
+                eventbox.size = 18
 
         # 主菜单
         if menu == 'main':
@@ -1702,7 +1869,7 @@ def main():
             button3.update_text('设置')
             button4.update_text('操作')
             if active_player.prison:
-                button4.isLocked = True
+                button4.lock()
             if button4.isWorked:
                 menu = 'handle'
                 button4.isWorked = False
@@ -1714,7 +1881,7 @@ def main():
                 menu = 'setting'
         # # 角色
         elif menu == 'character':
-            dice_button.isLocked = True
+            dice_button.lock()
             button1.update_text('技能')
             button2.update_text('祝福')
             button3.hide()
@@ -1756,8 +1923,8 @@ def main():
                 
         # # # 技能
         elif menu == 'skill':
-            dice_button.isLocked = True
-            button1.isLocked = True
+            dice_button.lock()
+            button1.lock()
             button1.update_text('确认使用')
             button2.update_text('取消')
             button3.hide()
@@ -1777,10 +1944,10 @@ def main():
             if not '使用' in eventbox.text:
                 eventbox.update_text('技能描述：\n \n' + skill_text + '\n \n当前技能点：({})'.format(active_player.skill_point))
             if skill_cost <= active_player.skill_point: 
-                button1.isLocked = False
+                button1.unlock()
             if button4.click():
                 menu = 'character'
-                button1.isLocked = False
+                button1.unlock()
             if button2.click():
                 pass
             if button1.click():
@@ -1843,9 +2010,9 @@ def main():
 
         # # 设置
         elif menu == 'setting':
-            dice_button.isLocked = True
+            dice_button.lock()
             if not '音乐' in button1.text:
-                button1.update_text('音乐：开')
+                button1.update_text('音乐：关')
             button2.update_text('保存')
             button3.update_text('读取')
             button4.update_text('返回')
@@ -1859,13 +2026,13 @@ def main():
                     button1.update_text('音乐：开')
                     pygame.mixer.music.unpause()
             if button2.click():
-                pass
+                need_save = True
             if button3.click():
-                pass
+                need_load = True
 
         # # 操作
         elif menu == 'handle':
-            dice_button.isLocked = True
+            dice_button.lock()
             button1.update_text('加盖')
             button2.update_text('交易')
             button3.update_text('抵押/赎回')
@@ -1886,11 +2053,11 @@ def main():
                 menu = 'deal'
         # # # 加盖
         elif menu == 'build':
-            dice_button.isLocked = True
+            dice_button.lock()
             enable_selectList = active_player.enable_blockList
             if not select_stat or select_stat == 'selected':
                 select_stat = 'begin'
-            button1.isLocked = True
+            button1.lock()
             button1.update_text('确定')
             button2.update_text('取消')
             button3.hide()
@@ -1901,7 +2068,7 @@ def main():
                     sum += block.newbuilding_price
                 eventbox.update_text('选择了{}块土地\n加盖费用{}元'.format(len(select_List), sum))
                 eventbox.need_update = True
-                button1.isLocked = False
+                button1.unlock()
             elif select_stat == 'selecting' and not '继续加盖' in eventbox.text:
                 eventbox.update_text('请点击需要加盖的土地：')
                 eventbox.need_update = True
@@ -1915,7 +2082,7 @@ def main():
                 select_List.clear()
                 moneybox.need_update = True
                 messagebox.need_update = True
-                button1.isLocked = False
+                button1.unlock()
                 enable_selectList = []
             if button1.click():
                 select_stat = 'selected'
@@ -1953,20 +2120,20 @@ def main():
                 select_List.clear()
         # # # 抵押
         elif menu == 'mortgage':
-            dice_button.isLocked = True
+            dice_button.lock()
             enable_selectList = active_player.enable_mortgageList
             if not select_stat or select_stat == 'selected':
                 select_stat = 'begin'
-            button1.isLocked = True
-            button2.isLocked = True
-            button3.isLocked = True
+            button1.lock()
+            button2.lock()
+            button3.lock()
             if select_List: 
-                button1.isLocked = False
+                button1.unlock()
                 colorDict = active_player.count_block_color(mode = 'in', list = select_List)
                 for color in colorDict.keys():
                     if colorDict[color] == active_player.allcolorDict[color]:
-                        button2.isLocked = False
-                        button3.isLocked = False
+                        button2.unlock()
+                        button3.unlock()
             button1.update_text('确定')
             button2.update_text('拆房')
             button3.update_text('全部')
@@ -1985,9 +2152,9 @@ def main():
                 eventbox.need_update = True
             if button4.click():
                 menu = 'handle'
-                button1.isLocked = True
-                button2.isLocked = False
-                button3.isLocked = False
+                button1.lock()
+                button2.unlock()
+                button3.unlock()
                 select_stat = ''
                 for block in active_player.building_list: 
                     block.need_select = False 
@@ -2042,15 +2209,15 @@ def main():
                 select_List.clear()
         # # # 赎回
         elif menu == 'buyback':
-            dice_button.isLocked = True
+            dice_button.lock()
             enable_selectList = active_player.enable_buybackList
             if not select_stat or select_stat == 'selected':
                 select_stat = 'begin'
-            button1.isLocked = True
-            button2.isLocked = True
+            button1.lock()
+            button2.lock()
             if select_List: 
-                button1.isLocked = False
-                button2.isLocked = False
+                button1.unlock()
+                button2.unlock()
             button1.update_text('确定')
             button2.update_text('取消')
             button3.hide()
@@ -2061,7 +2228,7 @@ def main():
                     sum += int(block.blockprice * 0.6)
                 eventbox.update_text('选择了{}块土地\n赎回费用{}元'.format(len(select_List), sum))
                 eventbox.need_update = True
-                button1.isLocked = False
+                button1.unlock()
             elif select_stat == 'selecting' and not '继续赎回' in eventbox.text:
                 eventbox.update_text('请点击需要赎回的土地：')
                 eventbox.need_update = True
@@ -2075,7 +2242,7 @@ def main():
                 select_List.clear()
                 moneybox.need_update = True
                 messagebox.need_update = True
-                button1.isLocked = False
+                button1.unlock()
                 enable_selectList = []
             if button1.click():
                 select_stat = 'selected'
@@ -2106,16 +2273,16 @@ def main():
                 select_List.clear()
         # # #交易
         elif menu == 'deal': 
-            dice_button.isLocked = True
+            dice_button.lock()
             if not select_stat or select_stat == 'selected':
                 select_stat = 'begin'
-            button1.isLocked = True
-            button2.isLocked = True
+            button1.lock()
+            button2.lock()
             if selectplayer:
                 enable_selectList = [selectplayer] + active_player.enable_dealList
                 if select_List and inputbox.text: 
-                    button1.isLocked = False
-                    button2.isLocked = False
+                    button1.unlock()
+                    button2.unlock()
             else:
                 enable_selectList = PlayerList + active_player.enable_dealList
                 enable_selectList.remove(active_player)
@@ -2142,7 +2309,7 @@ def main():
                 selectplayer = None
                 moneybox.need_update = True
                 messagebox.need_update = True
-                button1.isLocked = False
+                button1.unlock()
                 inputbox.hide()
                 enable_selectList = []
             if button1.click():
@@ -2204,15 +2371,15 @@ def main():
 
         
         # 移动结束后的事件：
-        if active_player.needmove == False and active_player.needjump == False and menu == 'main' and dice_button.text == '结束回合':
-            if not active_player.bankrupted:
-                dice_button.isLocked = False
+        if active_player.needmove == False and active_player.needjump == False and menu == 'main':
             if displaybox_init and not active_player.operate:
                 text = '玩家：{}\n来到了{}'.format(active_player.name, active_player.block.name)
                 if active_player.block.isbuilding == 0:
                     if not active_player.bankrupted:
-                        messagebox.add_rolltext(text)
-                        eventbox.update_text(text)
+                        if active_player.move_sign:
+                            messagebox.add_rolltext(text)
+                            eventbox.update_text(text)
+                            active_player.move_sign = False
                         if active_player.block.name == '监狱':
                             if not active_player.prison_passport:
                                 active_player.prison = 1
@@ -2230,7 +2397,7 @@ def main():
                                 messagebox.add_rolltext(receive)
                             else:
                                 charge = receive[0]
-                                t_text = receive[1] + '\n濒临破产，需支付欠款{}元'.format(active_player.name, charge)
+                                t_text = receive[1] + '\n濒临破产，需支付欠款{}元'.format(charge)
                                 eventbox.update_text(t_text, mode = 'add')
                                 messagebox.add_rolltext(t_text)
                         elif active_player.block.name == '祝福':
@@ -2253,7 +2420,7 @@ def main():
                     
                 elif active_player.block.isbuilding != 0:
                     if not active_player.block.owner and menu == 'main':
-                        if not '购买' in eventbox.text:
+                        if not '购买成功' in eventbox.text and not '购买失败' in eventbox.text:
                             eventbox.update_text('玩家：{}\n是否购买{}？'.format(active_player.name, active_player.block.name))
                         if button1.click() and menu == 'main':
                             buy_text = active_player.buy_Block(active_player.block)
@@ -2266,13 +2433,12 @@ def main():
                             active_player.move_sign = False
                     elif active_player.block.owner != active_player and menu == 'main':
                         if active_player.need_pay:
-                            # dice_button.isLocked = True
                             if not active_player.bankrupted:
                                 messagebox.add_rolltext(text)
                                 charge = int(active_player.block.get_charge(dice))
                             if charge:
                                 if not active_player.bankrupted:
-                                    dice_button.isLocked = False
+                                    dice_button.unlock()
                                     paytext = active_player.pay(int(charge), dice, active_player.block.owner)
                                     dice.charge_rolled = False    
                                     text_charge = ('玩家：{}\n走到了{}的{},真是不幸\n{}'
@@ -2284,11 +2450,11 @@ def main():
                                     messagebox.add_rolltext(text_charge)
                                     if '破产' in paytext:
                                         active_player.bankrupted = True
-                                        dice_button.islocked = True
+                                        dice_button.lock()
                                     else:
                                         active_player.operate = True
                                         eventbox.update_text(text_charge)
-                                else:
+                                elif active_player.asset_statistics() >= charge:
                                     eventbox.update_text('玩家：{}\n请支付欠款'.format(active_player.name))
                                     if button1.click() and menu == 'main':
                                         if active_player.money >= charge:
@@ -2307,9 +2473,10 @@ def main():
                     elif active_player.block.owner == active_player and not active_player.operate:
                         messagebox.add_rolltext(text)
                         active_player.operate = True
-
-        else:
-            pass
+            if not active_player.bankrupted and not dice.charge_needroll:
+                dice_button.unlock()
+        elif menu == 'bankrupted' and (dice_button.text == '确认破产' or dice_button.text == '游戏结束'):
+            dice_button.unlock()
 
 
         ## 画面更新部分
