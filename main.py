@@ -428,6 +428,7 @@ class Dice(object):
         self.charge_needroll = False
         self.need_update = True
         self.isbonus = False
+        self.set_diceList = None
 
     def get_saveList(self):
         savelis = [self.isbonus, self.rollList, self.rollsum]
@@ -438,11 +439,14 @@ class Dice(object):
         self.oldsurface = None
         return True
 
-    def get_randomList(self):
+    def get_randomList(self, mode = 'default'):
         rollList = []
         rollsum = 0
         for i in range(self.number):
-            t = self.get_roll()
+            if mode == 'set':
+                t = self.set_diceList[i]
+            else:
+                t = self.get_roll()
             rollList.append(t)
             rollsum += t
         self.rollsum = rollsum
@@ -507,7 +511,10 @@ class Dice(object):
                 self.rolled = False
                 if self.passedtime > self.ratetime:  # 骰子变化时
                     self.rolltime += 1
-                    self.rollList = self.get_randomList()
+                    if self.rolltime > self.rate and self.set_diceList:
+                        self.rollList = self.get_randomList('set')
+                    else:
+                        self.rollList = self.get_randomList()
                     self.passedtime = 0
                 if self.rolltime > self.rate:  # 显示结果时
                     self.passedtime = 0
@@ -668,9 +675,9 @@ class Block(object):
         if self.isbuilding:
             if self.redraw: # 载入时重绘
                 p_surf, p_rect = self.font.render('价格：' + str(self.blockprice) + '元', BLACK, size=15)
-                p_bgd = pygame.Surface((p_rect.w, p_rect.h))
+                p_bgd = pygame.Surface((p_rect.w + 10, p_rect.h))
                 p_bgd.fill((WHITE))
-                screen.blit(p_bgd, (self.w / 2 - p_rect.w / 2, self.h / 2 - p_rect.h / 2 + self.h / 5))
+                screen.blit(p_bgd, (self.w / 2 - p_rect.w / 2 - 5, self.h / 2 - p_rect.h / 2 + self.h / 5))
                 screen.blit(p_surf, (self.w / 2 - p_rect.w / 2, self.h / 2 - p_rect.h / 2 + self.h / 5))
             statusposList = self.statusposList
             bgrect = self.bgrect
@@ -779,14 +786,14 @@ class Player(object):
                 owntransport_numList.append(each.number)
         savelis = [self.name, self.money, self.direction, self.fixsign, self.position, self.i_position, self.block.number, ownblock_numList
                     , ownpublic_numList, owntransport_numList, self.bonus_count, self.bankrupted, self.prison, self.prison_passport
-                    , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y]
+                    , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y, self.operate]
         return savelis
     
     def load_saveList(self, savelis):
         if savelis[0] == self.name:
             [self.name, self.money, self.direction, self.fixsign, self.position, self.i_position, number, ownblock_numList
             , ownpublic_numList, owntransport_numList, self.bonus_count, self.bankrupted, self.prison, self.prison_passport
-            , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y] = savelis
+            , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y, self.operate] = savelis
             self.block = self.building_list[number]
             for each in ownblock_numList + ownpublic_numList + owntransport_numList:
                 if self.building_list[each].isbuilding == 1:
@@ -1089,7 +1096,12 @@ class Player(object):
                 self.money -= int(targetblock.blockprice * 0.6)
                 targetblock.mortgage = False
                 targetblock.need_select = False
-                self.ownblockList.append(targetblock)
+                if targetblock.isbuilding == 1:
+                    self.ownblockList.append(targetblock)
+                elif targetblock.isbuilding == 2:
+                    self.ownpublicList.append(targetblock)
+                elif targetblock.isbuilding == 3:
+                    self.owntransportList.append(targetblock)
                 self.update()
                 return True
             else:
@@ -1120,6 +1132,7 @@ class Player(object):
                     sell = (targetblock.newbuilding_price) * 0.5
                     if targetblock.hotal:
                         targetblock.hotal = False
+                        targetblock.houseNum = 4
                     else:
                         targetblock.houseNum -= 1
                     targetblock.need_select = False
@@ -1310,14 +1323,21 @@ class SpecialEvent(object):
         if mode == 8: # 全体拆迁事件
             for player in self.PlayerList:
                 for block in player.enable_mortgageList:
-                    if block.hotal:
-                        block.hotal = False
-                        block.houseNum = 4
-                    elif block.houseNum:
-                        block.houseNum -= 1
-                    else:
+                    if block.isbuilding == 1:
+                        if block.hotal:
+                            block.hotal = False
+                            block.houseNum = 4
+                        elif block.houseNum:
+                            block.houseNum -= 1
+                        else:
+                            block.mortgage = True
+                            player.ownblockList.remove(block)
+                    elif block.isbuilding == 2:
                         block.mortgage = True
-                        player.ownblockList.remove(block)
+                        player.ownpublicList.remove(block)
+                    elif block.isbuilding == 3:
+                        block.mortgage = True
+                        player.owntransportList.remove(block)
                     block.need_update = True
                 player.update()
             message = '全市大拆迁，所有玩家全体抵押一次'
@@ -1555,19 +1575,19 @@ def main():
     active_player = PlayerList[0]
 
     # 测试用
-    player1.money = 50000
-    for block in building_list:
-        if block.isbuilding and block.number != 1:
-            player1.buy_Block(block)
-            block.hotal = True
-    player2.money = 450
-    player2.buy_Block(building_list[1])
-    # player2.prison = 1
-    # player3.prison = 1
-    player3.money = 5
-    player4.money = 5
-    # for player in PlayerList:
-    #     player.skill_point = 40
+    # player1.money = 50000
+    # for block in building_list:
+    #     if block.isbuilding == 1:
+    #         player1.buy_Block(block)
+    #         block.hotal = True
+    # # player2.money = 450
+    # player2.buy_Block(building_list[1])
+    # # player2.prison = 1
+    # # player3.prison = 1
+    # player3.money = 5
+    # player4.money = 5
+    # # for player in PlayerList:
+    # #     player.skill_point = 40
 
     # //各类控件：
     # 文字显示框实例化：
@@ -1727,29 +1747,16 @@ def main():
                     index += 1
                     if index > len(PlayerList) - 1:
                         index = 0
-                if active_player == PlayerList[index]:
-                    active_player.bonus_count += 1
-                else:
+                if active_player != PlayerList[index]:
                     active_player.bonus_count = 0
                     active_player = PlayerList[index]
                 dice_button.text = dice.isbonus and '再掷一次！' or '{}\n点击投掷！'.format(active_player.name)
                 eventbox.update_text('玩家：{}\n请点击投掷！'.format(active_player.name))
             elif '掷' in dice_button.text:
                 dice_button.lock()
-                if active_player.bonus_count >=3:
-                    if not active_player.prison_passport: 
-                        messagebox.add_rolltext('玩家：{}因为太欧入狱'.format(active_player.name)) #待测试
-                        active_player.change_pos(building_list[16])
-                    else:
-                        messagebox.add_rolltext('玩家：{}因为太欧入狱，使用监狱通行证免于牢狱之灾'.format(active_player.name))
-                        active_player.prison_passport -= 1
-                        active_player.init()
-                        active_player.needjump = True
-                        dice.needroll = True
-                else:
-                    active_player.init()
-                    active_player.needjump = True
-                    dice.needroll = True
+                active_player.init()
+                active_player.needjump = True
+                dice.needroll = True
                 dice_button.text = '结束回合'
             elif dice_button.text == '确认破产':
                 eventbox.size = 20
@@ -1761,6 +1768,7 @@ def main():
                 b_player = active_player
                 for block in b_player.ownblockList + b_player.ownpublicList + b_player.owntransportList:
                     block.owner = None
+                    block.mortgage = False
                     block.need_update = True
                 active_player = PlayerList[index]
                 PlayerList.remove(b_player)
@@ -1820,6 +1828,8 @@ def main():
             eventbox.load_saveList(displaybox_saveList[2])
             active_player = PlayerList[active_player_index]
             dice_button.update_text(dice_button_savetext)
+            for player in PlayerList:
+                player.update()
             messagebox.add_rolltext('载入存档成功！')
             need_load = False
                 
@@ -2349,11 +2359,24 @@ def main():
                 
 
 
-        # moneybox 和 messagebox 显示部分
+        # 投掷结束后事件（一次触发性）
         if dice.rolled:
             messagebox.add_rolltext(
-                '玩家：{}，掷出{}点{}'.format(active_player.name, dice.rollsum, dice.isbonus and ',再掷一次' or ''))
-            if active_player.needmove:
+                '玩家：{}，掷出{}点{}'.format(active_player.name, dice.rollsum, dice.isbonus and ',再掷一次' or ''), force_update = True)
+            if dice.isbonus:
+                active_player.bonus_count += 1
+            if active_player.bonus_count >=3:
+                if not active_player.prison_passport: 
+                    messagebox.add_rolltext('玩家：{}因为太欧入狱'.format(active_player.name)) 
+                    active_player.change_pos(building_list[16])
+                    active_player.prison = 1
+                    dice_button.unlock()
+                    dice.isbonus = False
+                else:
+                    messagebox.add_rolltext('玩家：{}因为太欧入狱，使用监狱通行证免于牢狱之灾'.format(active_player.name))
+                    active_player.prison_passport -= 1
+                active_player.bonus_count = 0
+            if active_player.needmove and not active_player.prison:
                 active_player.dice = dice.rollsum
             dice.rolled = False
         if active_player.thoughstart == True:
@@ -2398,7 +2421,7 @@ def main():
                             else:
                                 charge = receive[0]
                                 t_text = receive[1] + '\n濒临破产，需支付欠款{}元'.format(charge)
-                                eventbox.update_text(t_text, mode = 'add')
+                                eventbox.update_text(t_text)
                                 messagebox.add_rolltext(t_text)
                         elif active_player.block.name == '祝福':
                             specialblock.active_player = active_player
@@ -2465,10 +2488,13 @@ def main():
                                             messagebox.add_rolltext(text_charge)
                                             eventbox.update_text(text_charge)
                                             active_player.operate = True       
-                            
                             elif active_player.block.owner.prison:
                                 messagebox.add_rolltext('玩家：{}，由于{}入狱，免收路费'.format(active_player.name, 
                                                         active_player.block.owner.name))
+                                active_player.operate = True
+                            elif active_player.block.mortgage:
+                                messagebox.add_rolltext('玩家：{}，由于{}已抵押，免收路费'.format(active_player.name, 
+                                                        active_player.block.name))
                                 active_player.operate = True
                     elif active_player.block.owner == active_player and not active_player.operate:
                         messagebox.add_rolltext(text)
