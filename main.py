@@ -786,22 +786,25 @@ class Player(object):
                 owntransport_numList.append(each.number)
         savelis = [self.name, self.money, self.direction, self.fixsign, self.position, self.i_position, self.block.number, ownblock_numList
                     , ownpublic_numList, owntransport_numList, self.bonus_count, self.bankrupted, self.prison, self.prison_passport
-                    , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y, self.operate]
+                    , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y, self.operate, self.bankrupted]
         return savelis
     
     def load_saveList(self, savelis):
         if savelis[0] == self.name:
             [self.name, self.money, self.direction, self.fixsign, self.position, self.i_position, number, ownblock_numList
             , ownpublic_numList, owntransport_numList, self.bonus_count, self.bankrupted, self.prison, self.prison_passport
-            , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y, self.operate] = savelis
+            , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y, self.operate, self.bankrupted] = savelis
             self.block = self.building_list[number]
             for each in ownblock_numList + ownpublic_numList + owntransport_numList:
                 if self.building_list[each].isbuilding == 1:
-                    self.ownblockList.append(self.building_list[each])
+                    if self.building_list[each] in self.ownblockList:
+                        self.ownblockList.append(self.building_list[each])
                 elif self.building_list[each].isbuilding == 2:
-                    self.ownpublicList.append(self.building_list[each])
+                    if self.building_list[each] in self.ownblockList:
+                        self.ownpublicList.append(self.building_list[each])
                 elif self.building_list[each].isbuilding == 3:
-                    self.owntransportList.append(self.building_list[each])
+                    if self.building_list[each] in self.ownblockList:
+                        self.owntransportList.append(self.building_list[each])
             self.update()
             return True
         else:
@@ -1208,10 +1211,12 @@ class Player(object):
     def asset_statistics(self):
         sum = 0
         for block in self.ownblockList:
-            num = block.hotal and 5 or block.houseNum
-            sum += block.blockprice + block.newbuilding_price * num
+            if block.mortgage:
+                num = block.hotal and 5 or block.houseNum
+                sum += block.blockprice + block.newbuilding_price * num
         for block in self.ownpublicList + self.owntransportList:
-            sum += block.blockprice
+            if block.mortgage:
+                sum += block.blockprice
         return int(sum * 0.5) + self.money
     
 class SpecialEvent(object):
@@ -1567,9 +1572,9 @@ def main():
     player_disy = int(building_list[0].h * 0.2)
     player1 = Player('黑子', iconDict['黑子'], building_list[0], 0, building_list)
     player2 = Player('泪子', iconDict['泪子'], building_list[0], 1, building_list)
-    player3 = Player('食蜂', iconDict['食蜂'], building_list[0], 2, building_list)
+    # player3 = Player('食蜂', iconDict['食蜂'], building_list[0], 2, building_list)
     player4 = Player('警策', iconDict['警策'], building_list[0], 3, building_list)
-    PlayerList.extend([player1, player2, player3, player4])
+    PlayerList.extend([player1, player2, player4])
     random.shuffle(PlayerList)
     RAW_PlayerList = PlayerList.copy()
     active_player = PlayerList[0]
@@ -1794,7 +1799,7 @@ def main():
                 building_saveList.append(block.get_saveList())
             displaybox_saveList = [moneybox.get_saveList(), messagebox.get_saveList(), eventbox.get_saveList()]
             active_player_index = PlayerList.index(active_player)
-            savelis = (player_saveList, dice_save, building_saveList, displaybox_saveList, active_player_index, dice_button.text)
+            savelis = (player_saveList, dice_save, building_saveList, displaybox_saveList, active_player_index, dice_button.text, charge)
             with open(s_path, 'wb') as f:
                 pickle.dump(savelis, f)
             need_save = False
@@ -1803,7 +1808,8 @@ def main():
             if os.path.exists(s_path):
                 with open(s_path, 'rb') as f:
                     loadlis = pickle.load(f)
-                (player_saveList, dice_save, building_saveList, displaybox_saveList, active_player_index, dice_button_savetext) = loadlis
+                (player_saveList, dice_save, building_saveList, displaybox_saveList, active_player_index, dice_button_savetext
+                , charge) = loadlis
                 PlayerList.clear()
                 for i in range(len(player_saveList)):
                     player_save = player_saveList[i]
@@ -2501,6 +2507,7 @@ def main():
                                 active_player.operate = True
                     elif active_player.block.owner == active_player and not active_player.operate:
                         messagebox.add_rolltext(text)
+                        event.update_text(text)
                         active_player.operate = True
             if not active_player.bankrupted and not dice.charge_needroll:
                 dice_button.unlock()
