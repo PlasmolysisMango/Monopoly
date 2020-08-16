@@ -795,6 +795,9 @@ class Player(object):
             , ownpublic_numList, owntransport_numList, self.bonus_count, self.bankrupted, self.prison, self.prison_passport
             , self.skill_point, self.blessing, self.x, self.y, self.i_x, self.i_y, self.operate, self.bankrupted] = savelis
             self.block = self.building_list[number]
+            self.ownblockList.clear()
+            self.ownpublicList.clear()
+            self.owntransportList.clear()
             for each in ownblock_numList + ownpublic_numList + owntransport_numList:
                 if self.building_list[each].isbuilding == 1:
                     if self.building_list[each] in self.ownblockList:
@@ -1785,7 +1788,7 @@ def main():
 
         # 保存读取
         save_time += saveclock.tick() / 1000
-        if save_time > 60.0:
+        if save_time > 60.0 and not active_player.needmove and not active_player.needjump:
             need_save = True
             save_time = 0
             messagebox.add_rolltext('自动保存中...')
@@ -1955,7 +1958,7 @@ def main():
                 skill_cost = 2
                 skill_text = '消耗({})点技能点\n随机移动至一块土地'.format(skill_cost)
             elif active_player.name == '泪子':
-                skill_cost = 2
+                skill_cost = 1
                 skill_text = '消耗({})点技能点\n随机触发一次幸运机会'.format(skill_cost)
             elif active_player.name == '警策':
                 skill_cost = 2
@@ -2004,7 +2007,7 @@ def main():
                     chanceList = [1, 3, 5, 7, 9, 12, 14] # 奖金、退税、加盖、群体加盖、随机空地、监狱通行证、随机移动
                     buildrate = active_player.enable_blockList and 3 or 1
                     tax = active_player.ownblockList and 5 or 2
-                    heightList = [5, tax, 1 + buildrate, buildrate - 1, 1 + (3 - buildrate), 4, 3]
+                    heightList = [5, tax, 1 + buildrate, buildrate - 1, 1 + (4 - buildrate), 3, 2]
                     chance_mode = random.choices(chanceList, heightList)[0]
                     specialblock.active_player = active_player
                     receive = specialblock.chance(chance_mode)
@@ -2473,7 +2476,7 @@ def main():
                                     dice_button.unlock()
                                     paytext = active_player.pay(int(charge), dice, active_player.block.owner)
                                     dice.charge_rolled = False    
-                                    text_charge = ('玩家：{}\n走到了{}的{},真是不幸\n{}'
+                                    text_charge = ('玩家：{}\n走到了{}的{}\n{}'
                                                 .format(active_player.name, active_player.block.owner.name,
                                                         active_player.block.isbuilding != 1
                                                         and '产业' or (active_player.block.hotal and '旅馆' or (
