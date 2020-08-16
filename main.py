@@ -1800,37 +1800,40 @@ def main():
             need_save = False
             messagebox.add_rolltext('保存完成！')
         if need_load:
-            with open(s_path, 'rb') as f:
-                loadlis = pickle.load(f)
-            (player_saveList, dice_save, building_saveList, displaybox_saveList, active_player_index, dice_button_savetext) = loadlis
-            PlayerList.clear()
-            for i in range(len(player_saveList)):
-                player_save = player_saveList[i]
-                for player in RAW_PlayerList:
-                    if player.name == player_save[0]:
-                        PlayerList.append(player)
-                        player.load_saveList(player_save)
-                        break
-            dice.load_saveList(dice_save)
-            for i in range(len(building_list)):
-                blockowner_name = building_saveList[i][-1]
-                if blockowner_name:
-                    for player in PlayerList:
-                        if player.name == blockowner_name:
-                            block_owner = player
+            if os.path.exists(s_path):
+                with open(s_path, 'rb') as f:
+                    loadlis = pickle.load(f)
+                (player_saveList, dice_save, building_saveList, displaybox_saveList, active_player_index, dice_button_savetext) = loadlis
+                PlayerList.clear()
+                for i in range(len(player_saveList)):
+                    player_save = player_saveList[i]
+                    for player in RAW_PlayerList:
+                        if player.name == player_save[0]:
+                            PlayerList.append(player)
+                            player.load_saveList(player_save)
                             break
-                else:
-                    block_owner = None
-                building_saveList[i][-1] = block_owner
-                building_list[i].load_saveList(building_saveList[i])
-            moneybox.load_saveList(displaybox_saveList[0])
-            messagebox.load_saveList(displaybox_saveList[1])
-            eventbox.load_saveList(displaybox_saveList[2])
-            active_player = PlayerList[active_player_index]
-            dice_button.update_text(dice_button_savetext)
-            for player in PlayerList:
-                player.update()
-            messagebox.add_rolltext('载入存档成功！')
+                dice.load_saveList(dice_save)
+                for i in range(len(building_list)):
+                    blockowner_name = building_saveList[i][-1]
+                    if blockowner_name:
+                        for player in PlayerList:
+                            if player.name == blockowner_name:
+                                block_owner = player
+                                break
+                    else:
+                        block_owner = None
+                    building_saveList[i][-1] = block_owner
+                    building_list[i].load_saveList(building_saveList[i])
+                moneybox.load_saveList(displaybox_saveList[0])
+                messagebox.load_saveList(displaybox_saveList[1])
+                eventbox.load_saveList(displaybox_saveList[2])
+                active_player = PlayerList[active_player_index]
+                dice_button.update_text(dice_button_savetext)
+                for player in PlayerList:
+                    player.update()
+                messagebox.add_rolltext('载入存档成功！')
+            else:
+                messagebox.add_rolltext('未找到存档文件！')
             need_load = False
                 
         # 方块选择状态：
